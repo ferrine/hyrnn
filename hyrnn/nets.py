@@ -1,6 +1,7 @@
 import torch.jit
 import torch.nn
 import torch.nn.functional
+import math
 import geoopt.manifolds.poincare.math as pmath
 import geoopt
 
@@ -39,13 +40,13 @@ def mobius_gru_cell(
     nonlin=None,
 ):
     W_ir, W_ih, W_iz = weight_ih.chunk(3)
-    b_r, b_h, b_z = bias.chunk(3)
+    b_r, b_h, b_z = bias
     W_hr, W_hh, W_hz = weight_hh.chunk(3)
     Wr_ht = pmath.mobius_matvec(W_hr, hx, c=c)
     Wr_it_b = pmath.mobius_add(pmath.mobius_matvec(W_ir, input, c=c), b_r, c=c)
     r_t = pmath.logmap0(pmath.mobius_add(Wr_ht, Wr_it_b, c=c), c=c).sigmoid()
 
-    Wh_r_hx = pmath.mobius_matvec(W_hh * r_t, hx, c=c)
+    Wh_r_hx = pmath.mobius_matvec(W_hh * r_t.unsqueeze(1), hx, c=c)
     Wh_it_b = pmath.mobius_add(pmath.mobius_matvec(W_ih, input, c=c), b_h, c=c)
     h_tilde = pmath.mobius_add(Wh_r_hx, Wh_it_b, c=c)
 
@@ -140,25 +141,63 @@ class MobiusDist2Hyperplane(torch.nn.Module):
         )
 
 
-class MobiusGRUCell(torch.nn.RNNCellBase):
-    def __init__(self, input_size, hidden_size, bias=True, nonlin=None, c=1.0):
-        super().__init__(input_size, hidden_size, bias=False, num_chunks=3)
+class MobiusGRU(torch.nn.Module):
+    def __init__(self, input_size, hidden_size, bias=True, nonlin=None, c=1.0, hyperbolic_input=True, hyperbolic_hidden_state0=True):
+        super().__init__()
         self.ball = geoopt.PoincareBall(c=c)
+        self.input_size = input_size
+        self.hidden_size = hidden_size
+        self.bias = bias
+        self.weight_ih = torch.nn.Parameter(torch.Tensor(3 * hidden_size, input_size))
+        self.weight_hh = torch.nn.Parameter(torch.Tensor(3 * hidden_size, hidden_size))
         if bias:
-            self.bias_ih = geoopt.ManifoldParameter(torch.randn(3 * hidden_size)*1e-5, manifold=self.ball)
+            bias = torch.randn(3, hidden_size) * 1e-5
+            self.bias = geoopt.ManifoldParameter(pmath.expmap0(bias, c=self.ball.c), manifold=self.ball)
+        else:
+            self.register_parameter('bias', None)
         self.nonlin = nonlin
+        self.hyperbolic_input = hyperbolic_input
+        self.hyperbolic_hidden_state0 = hyperbolic_hidden_state0
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        stdv = 1.0 / math.sqrt(self.hidden_size)
+        for weight in self.parameters():
+            torch.nn.init.uniform_(weight, -stdv, stdv)
 
     def forward(self, input: torch.Tensor, hx=None):
-        self.check_forward_input(input)
+        # input shape: seq_len, batch, input_size
+        # hx shape: batch, hidden_size
+        is_packed = isinstance(input, torch.nn.utils.rnn.PackedSequence)
+        if is_packed:
+            input, batch_sizes = input
+        else:
+            batch_sizes = None
         if hx is None:
-            hx = input.new_zeros(input.size(0), self.hidden_size, requires_grad=False)
-        self.check_forward_hidden(input, hx)
-        return mobius_gru_cell(
-            input=input,
-            hx=hx,
-            weight_ih=self.weight_ih,
-            weight_hh=self.weight_hh,
-            bias=self.weight_ih,
-            nonlin=self.nonlin,
-            c=self.ball.c
-        )
+            hx = input.new_zeros(input.size(1), self.hidden_size, requires_grad=False)
+        elif not self.hyperbolic_hidden_state0:
+            hx = pmath.expmap0(hx, c=self.ball.c)
+        if not self.hyperbolic_input:
+            input = pmath.expmap0(input, c=self.ball.c)
+        outs = []
+        for t in range(input.size(0)):
+            hx = mobius_gru_cell(
+                input=input[t],
+                hx=hx,
+                weight_ih=self.weight_ih,
+                weight_hh=self.weight_hh,
+                bias=self.bias,
+                nonlin=self.nonlin,
+                c=self.ball.c
+            )
+            outs.append(hx)
+        outs = torch.stack(outs)
+        if is_packed:
+            outs = torch.nn.utils.rnn.PackedSequence(outs, batch_sizes)
+        return outs
+
+    def extra_repr(self):
+        return ("{input_size}, {output_size}, bias={bias}, "
+                "hyperbolic_input={hyperbolic_input}, "
+                "hyperbolic_hidden_state0={}, c={self.c}").format(
+            **self.__dict__, self=self, bias=self.bias is not None)
