@@ -180,7 +180,8 @@ class MobiusGRU(torch.nn.Module):
         if not self.hyperbolic_input:
             input = pmath.expmap0(input, c=self.ball.c)
         outs = []
-        for t in range(input.size(0)):
+        input = input.unbind(0)
+        for t in range(len(input)):
             hx = mobius_gru_cell(
                 input=input[t],
                 hx=hx,
@@ -188,7 +189,7 @@ class MobiusGRU(torch.nn.Module):
                 weight_hh=self.weight_hh,
                 bias=self.bias,
                 nonlin=self.nonlin,
-                c=self.ball.c
+                c=self.ball.c,
             )
             outs.append(hx)
         outs = torch.stack(outs)
@@ -197,7 +198,7 @@ class MobiusGRU(torch.nn.Module):
         return outs
 
     def extra_repr(self):
-        return ("{input_size}, {output_size}, bias={bias}, "
+        return ("{input_size}, {hidden_size}, bias={bias}, "
                 "hyperbolic_input={hyperbolic_input}, "
-                "hyperbolic_hidden_state0={}, c={self.c}").format(
+                "hyperbolic_hidden_state0={hyperbolic_hidden_state0}, c={self.ball.c}").format(
             **self.__dict__, self=self, bias=self.bias is not None)
