@@ -61,6 +61,40 @@ def mobius_gru_cell(
     return h_out
 
 
+def mobius_gru_loop(
+    input: torch.Tensor,
+    h0: torch.Tensor,
+    weight_ih: torch.Tensor,
+    weight_hh: torch.Tensor,
+    bias: torch.Tensor,
+    c: torch.Tensor,
+    hyperbolic_input: bool,
+    hyperbolic_hidden_state0: bool,
+    nonlin=None,
+):
+    if not hyperbolic_hidden_state0:
+        hx = pmath.expmap0(h0, c=c)
+    else:
+        hx = h0
+    if not hyperbolic_input:
+        input = pmath.expmap0(input, c=c)
+    outs = []
+    input_unbinded = input.unbind(0)
+    for t in range(input.size(0)):
+        hx = mobius_gru_cell(
+            input=input_unbinded[t],
+            hx=hx,
+            weight_ih=weight_ih,
+            weight_hh=weight_hh,
+            bias=bias,
+            nonlin=nonlin,
+            c=c,
+        )
+        outs.append(hx)
+    outs = torch.stack(outs)
+    return outs
+
+
 class MobiusLinear(torch.nn.Linear):
     def __init__(
         self,
@@ -165,7 +199,7 @@ class MobiusGRU(torch.nn.Module):
         for weight in self.parameters():
             torch.nn.init.uniform_(weight, -stdv, stdv)
 
-    def forward(self, input: torch.Tensor, hx=None):
+    def forward(self, input: torch.Tensor, h0=None):
         # input shape: seq_len, batch, input_size
         # hx shape: batch, hidden_size
         is_packed = isinstance(input, torch.nn.utils.rnn.PackedSequence)
@@ -173,26 +207,19 @@ class MobiusGRU(torch.nn.Module):
             input, batch_sizes = input
         else:
             batch_sizes = None
-        if hx is None:
-            hx = input.new_zeros(input.size(1), self.hidden_size, requires_grad=False)
-        elif not self.hyperbolic_hidden_state0:
-            hx = pmath.expmap0(hx, c=self.ball.c)
-        if not self.hyperbolic_input:
-            input = pmath.expmap0(input, c=self.ball.c)
-        outs = []
-        input = input.unbind(0)
-        for t in range(len(input)):
-            hx = mobius_gru_cell(
-                input=input[t],
-                hx=hx,
-                weight_ih=self.weight_ih,
-                weight_hh=self.weight_hh,
-                bias=self.bias,
-                nonlin=self.nonlin,
-                c=self.ball.c,
-            )
-            outs.append(hx)
-        outs = torch.stack(outs)
+        if h0 is None:
+            h0 = input.new_zeros(input.size(1), self.hidden_size, requires_grad=False)
+        outs = mobius_gru_loop(
+            input=input,
+            h0=h0,
+            weight_ih=self.weight_ih,
+            weight_hh=self.weight_hh,
+            bias=self.bias,
+            c=self.ball.c,
+            hyperbolic_hidden_state0=self.hyperbolic_hidden_state0,
+            hyperbolic_input=self.hyperbolic_input,
+            nonlin=self.nonlin,
+        )
         if is_packed:
             outs = torch.nn.utils.rnn.PackedSequence(outs, batch_sizes)
         return outs
@@ -200,5 +227,6 @@ class MobiusGRU(torch.nn.Module):
     def extra_repr(self):
         return ("{input_size}, {hidden_size}, bias={bias}, "
                 "hyperbolic_input={hyperbolic_input}, "
-                "hyperbolic_hidden_state0={hyperbolic_hidden_state0}, c={self.ball.c}").format(
+                "hyperbolic_hidden_state0={hyperbolic_hidden_state0}, "
+                "c={self.ball.c}").format(
             **self.__dict__, self=self, bias=self.bias is not None)
