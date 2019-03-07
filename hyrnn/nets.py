@@ -112,11 +112,7 @@ class MobiusLinear(torch.nn.Linear):
                 self.ball = manifold = geoopt.PoincareBall(c=c).set_default_order(order)
                 self.bias = geoopt.ManifoldParameter(self.bias, manifold=manifold)
                 with torch.no_grad():
-                    self.bias.set_(
-                        pmath.expmap0(
-                            self.bias.normal_() / 2, c=c
-                        )
-                    )
+                    self.bias.set_(pmath.expmap0(self.bias.normal_() / 2, c=c))
         with torch.no_grad():
             self.weight.normal_(std=1e-2)
         self.hyperbolic_bias = hyperbolic_bias
@@ -151,12 +147,11 @@ class MobiusDist2Hyperplane(torch.nn.Module):
         self.out_features = out_features
         self.ball = ball = geoopt.PoincareBall(c=c).set_default_order(order)
         self.sphere = sphere = geoopt.manifolds.Sphere().set_default_order(order)
-        self.scale = torch.nn.Parameter(torch.ones(out_features))
+        self.scale = torch.nn.Parameter(torch.zeros(out_features))
         point = torch.randn(out_features, in_features) / 2
         point = pmath.expmap0(point, c=c)
         tangent = torch.randn(out_features, in_features)
-        tangent /= tangent.norm(dim=-1, p=2, keepdim=True)
-        self.point = geoopt.ManifoldParameter(point, manifold=ball)
+        self.point = geoopt.ManifoldParameter(point, manifold=ball).proj_()
         self.tangent = geoopt.ManifoldParameter(tangent, manifold=sphere)
 
     def forward(self, input):
@@ -176,7 +171,16 @@ class MobiusDist2Hyperplane(torch.nn.Module):
 
 
 class MobiusGRU(torch.nn.Module):
-    def __init__(self, input_size, hidden_size, bias=True, nonlin=None, c=1.0, hyperbolic_input=True, hyperbolic_hidden_state0=True):
+    def __init__(
+        self,
+        input_size,
+        hidden_size,
+        bias=True,
+        nonlin=None,
+        c=1.0,
+        hyperbolic_input=True,
+        hyperbolic_hidden_state0=True,
+    ):
         super().__init__()
         self.ball = geoopt.PoincareBall(c=c)
         self.input_size = input_size
@@ -186,9 +190,11 @@ class MobiusGRU(torch.nn.Module):
         self.weight_hh = torch.nn.Parameter(torch.Tensor(3 * hidden_size, hidden_size))
         if bias:
             bias = torch.randn(3, hidden_size) * 1e-5
-            self.bias = geoopt.ManifoldParameter(pmath.expmap0(bias, c=self.ball.c), manifold=self.ball)
+            self.bias = geoopt.ManifoldParameter(
+                pmath.expmap0(bias, c=self.ball.c), manifold=self.ball
+            )
         else:
-            self.register_parameter('bias', None)
+            self.register_parameter("bias", None)
         self.nonlin = nonlin
         self.hyperbolic_input = hyperbolic_input
         self.hyperbolic_hidden_state0 = hyperbolic_hidden_state0
@@ -225,8 +231,9 @@ class MobiusGRU(torch.nn.Module):
         return outs
 
     def extra_repr(self):
-        return ("{input_size}, {hidden_size}, bias={bias}, "
-                "hyperbolic_input={hyperbolic_input}, "
-                "hyperbolic_hidden_state0={hyperbolic_hidden_state0}, "
-                "c={self.ball.c}").format(
-            **self.__dict__, self=self, bias=self.bias is not None)
+        return (
+            "{input_size}, {hidden_size}, bias={bias}, "
+            "hyperbolic_input={hyperbolic_input}, "
+            "hyperbolic_hidden_state0={hyperbolic_hidden_state0}, "
+            "c={self.ball.c}"
+        ).format(**self.__dict__, self=self, bias=self.bias is not None)
