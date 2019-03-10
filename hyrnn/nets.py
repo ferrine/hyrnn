@@ -42,17 +42,21 @@ def mobius_gru_cell(
     W_ir, W_ih, W_iz = weight_ih.chunk(3)
     b_r, b_h, b_z = bias
     W_hr, W_hh, W_hz = weight_hh.chunk(3)
+
     Wr_ht = pmath.mobius_matvec(W_hr, hx, c=c)
-    Wr_it_b = pmath.mobius_add(pmath.mobius_matvec(W_ir, input, c=c), b_r, c=c)
-    r_t = pmath.logmap0(pmath.mobius_add(Wr_ht, Wr_it_b, c=c), c=c).sigmoid()
+    Wr_it = pmath.mobius_matvec(W_ir, input, c=c)
+    Wr_ht_plus_Wr_it = pmath.mobius_add(Wr_ht, Wr_it, c=c)
+    r_t = pmath.logmap0(pmath.mobius_add(Wr_ht_plus_Wr_it, b_r, c=c), c=c).sigmoid()
 
     Wh_r_hx = pmath.mobius_matvec(W_hh * r_t.unsqueeze(1), hx, c=c)
-    Wh_it_b = pmath.mobius_add(pmath.mobius_matvec(W_ih, input, c=c), b_h, c=c)
-    h_tilde = pmath.mobius_add(Wh_r_hx, Wh_it_b, c=c)
+    Wh_it = pmath.mobius_matvec(W_ih, input, c=c)
+    Wh_r_hx_plus_Wh_it_b = pmath.mobius_add(Wh_r_hx, Wh_it, c=c)
+    h_tilde = pmath.mobius_add(Wh_r_hx_plus_Wh_it_b, b_h, c=c)
 
     Wz_ht = pmath.mobius_matvec(W_hz, hx, c=c)
-    Wz_it_b = pmath.mobius_add(pmath.mobius_matvec(W_iz, input, c=c), b_z, c=c)
-    z_t = pmath.logmap0(pmath.mobius_add(Wz_ht, Wz_it_b, c=c), c=c).sigmoid()
+    Wz_it = pmath.mobius_matvec(W_iz, input, c=c)
+    Wz_ht_plus_Wz_it = pmath.mobius_add(Wz_ht, Wz_it, c=c)
+    z_t = pmath.logmap0(pmath.mobius_add(Wz_ht_plus_Wz_it, b_z, c=c), c=c).sigmoid()
 
     if nonlin is not None:
         h_tilde = pmath.mobius_fn_apply(nonlin, h_tilde, c=c)
