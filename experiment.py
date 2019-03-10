@@ -10,24 +10,27 @@ class baseEucl(nn.Module):
         super(baseEucl, self).__init__()
         self.embedding = nn.Embedding(vocab_size, dim_size)
         self.linear = nn.Linear(hidden_size*2+1, 2)
-        self.sofmtax = nn.Softmax()
+        self.softmax = nn.Softmax()
 
-    def forward(self, source_input, target_input):
-        source_embed = self.embedding(source_input).view(1,1,-1)
-        target_embed = self.embedding(target_input).view(1,1,-1)
+    def forward(self, input):
+        source_input = input[0]
+        target_input = input[1]
+
+        source_embed = self.embedding(source_input)
+        target_embed = self.embedding(target_input)
 
         source_output = source_embed
         target_output = target_embed
 
-        import pdb
-        pdb.set_trace()
+        source_output, source_hidden = self.cell_1(source_output, torch.zeros(2, source_input.shape[1],hidden_size))
+        target_output, target_hidden = self.cell_2(target_output, torch.zeros(2, target_input.shape[1], hidden_size))
 
-        source_output, source_hidden = self.cell_1(source_output, torch.zeros(2, source_input.shape[0],hidden_size))
-        target_output, target_hidden = self.cell_2(target_output, torch.zeros(2, source_input.shape[0], hidden_size))
+        target_hidden = target_hidden[-1]
+        source_hidden = source_hidden[-1]
 
-        dist = torch.norm(source_hidden - target_hidden)
+        dist = torch.unsqueeze(torch.norm(source_hidden - target_hidden, dim=1),1)
 
-        hidden = torch.cat((target_hidden, source_hidden, dist))
+        hidden = torch.cat((target_hidden, source_hidden, dist), dim=1)
 
         hidden = self.softmax(self.linear(hidden))
 
@@ -37,15 +40,15 @@ class baseEucl(nn.Module):
 class RNNEucl(baseEucl):
     def __init__(self, vocab_size, dim_size, hidden_size):
         super(RNNEucl, self).__init__(vocab_size, dim_size, hidden_size)
-        self.cell_1 = nn.RNN(dim_size, hidden_size, 2)
-        self.cell_2 = nn.RNN(dim_size, hidden_size, 2)
+        self.cell_1 = nn.RNN(dim_size, hidden_size, 2, batch_first=False)
+        self.cell_2 = nn.RNN(dim_size, hidden_size, 2, batch_first=False)
 
 
 class GRUEucl(baseEucl):
     def __init__(self, vocab_size, dim_size, hidden_size):
         super(GRUEucl, self).__init__(vocab_size, dim_size, hidden_size)
-        self.cell_1 = nn.GRU(dim_size, hidden_size, 2)
-        self.cell_2 = nn.GRU(dim_size, hidden_size, 2)
+        self.cell_1 = nn.GRU(dim_size, hidden_size, 2, batch_first=False)
+        self.cell_2 = nn.GRU(dim_size, hidden_size, 2, batch_first=False)
 
 
 logdir = './logdir'
@@ -61,7 +64,7 @@ loader_train = torch.utils.data.DataLoader(dataset_train, batch_size=64, collate
 loader_test = torch.utils.data.DataLoader(dataset_test, batch_size=64, collate_fn=prefix_dataset.packing_collate_fn)
 
 
-vocab_size = 100
+vocab_size = 400
 dim_size = 5
 hidden_size = 5
 
