@@ -232,7 +232,18 @@ class MobiusGRU(torch.nn.Module):
         )
         if is_packed:
             outs = torch.nn.utils.rnn.PackedSequence(outs, batch_sizes)
-            ht = outs[-1]  # todo: use batch_sizes to get last element
+            # TODO: separate out into a util function
+            # TODO: find means to vectorize, or at least rewrite in C++
+            n_timestamps, n_batches = outs.data.shape[:2]
+            indices = torch.Tensor(n_batches)
+            indices.fill_(0)
+            last_bs = n_batches
+            for t in range(n_timestamps):
+                bs = outs.batch_sizes[t]
+                for b in range(bs, last_bs):
+                    indices[b] = t
+                last_bs = bs
+            ht = outs.data.index_select(0, indices)
         else:
             ht = outs[-1]
         return outs, ht
