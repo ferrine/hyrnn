@@ -94,6 +94,7 @@ class PrefixDataset(torch.utils.data.Dataset):
     def __repr__(self):
         fmt_str = "Dataset {}-{}\n".format(self.__class__.__name__, self.num)
         fmt_str += "    Number of datapoints: {}\n".format(self.__len__())
+        fmt_str += "    Number of words: {}\n".format(len(self.id2word))
         fmt_str += "    Split: {}\n".format(self.split)
         fmt_str += "    Root/data Location: {}\n".format(
             os.path.join(self.root, self._suffix)
