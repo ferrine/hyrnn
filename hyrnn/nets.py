@@ -232,7 +232,10 @@ class MobiusGRU(torch.nn.Module):
         )
         if is_packed:
             outs = torch.nn.utils.rnn.PackedSequence(outs, batch_sizes)
-        return outs
+            ht = outs[-1]  # todo: use batch_sizes to get last element
+        else:
+            ht = outs[-1]
+        return outs, ht
 
     def extra_repr(self):
         return (
