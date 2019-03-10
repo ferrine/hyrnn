@@ -1,8 +1,9 @@
 import torch
-from .module import Module
+from torch.nn.modules.module import Module
 from torch.nn import functional as F
 from torch.nn import init
 from torch._jit_internal import weak_module, weak_script, weak_script_method
+import geoopt
 
 
 @weak_module
@@ -34,15 +35,17 @@ class LookupEmbedding(Module):
     def __init__(self, num_embeddings, embedding_dim, manifold, _weight=None):
         super(LookupEmbedding, self).__init__()
         if isinstance(embedding_dim, int):
-            embedding_dim = (embedding,)
+            embedding_dim = (embedding_dim,)
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         if _weight is None:
             _weight = torch.Tensor(num_embeddings, *embedding_dim)
-        assert self.weight.shape == (num_embeddings, *embedding_dim), \
-               '_weight MUST be of shape (num_embeddings, *embedding_dim)'
-        self.weight = ManifoldParameter(_weight, manifold=manifold)
-        self.reset_parameters()
+            self.weight = geoopt.ManifoldParameter(_weight, manifold=manifold)
+            self.reset_parameters()
+        else:
+            assert _weight.shape == (num_embeddings, *embedding_dim), \
+                   '_weight MUST be of shape (num_embeddings, *embedding_dim)'
+            self.weight = geoopt.ManifoldParameter(_weight, manifold=manifold)
 
     def reset_parameters(self):
         # TODO: allow some sort of InitPolicy
@@ -56,7 +59,8 @@ class LookupEmbedding(Module):
 
     @weak_script_method
     def forward(self, input):
-        shape = list(input.shape) + self.weight.shape[1:]
-        return self.weight.index_select(0, input.reshape(-1)).reshape(shape)
+        shape = list(input.shape) + list(self.weight.shape[1:])
+        shape = tuple(shape)
+        return self.weight.index_select(0, input.reshape(-1)).view(shape)
 
     # TODO: backward?
