@@ -111,3 +111,7 @@ Makefile
 cfg/
 data/
 notebooks/
+
+logdir/
+data/
+

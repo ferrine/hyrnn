@@ -1,0 +1,3 @@
+[2019-03-10 18:10:15,403] 
+0/10 * Epoch (train): _fps=4303.4464 | base/batch_time=0.0156 | base/data_time=0.0034 | base/lr=0.0010 | base/model_time=0.0121 | base/momentum=0.9000 | loss=0.5519
+0/10 * Epoch (valid): _fps=4123.1651 | base/batch_time=0.0158 | base/data_time=0.0040 | base/lr=0.0010 | base/model_time=0.0117 | base/momentum=0.9000 | loss=0.4959
