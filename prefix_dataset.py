@@ -1,5 +1,6 @@
 import torch.utils.data
 import torch.nn.utils
+import collections
 import pickle
 import os
 import errno
@@ -102,15 +103,27 @@ class PrefixDataset(torch.utils.data.Dataset):
         return fmt_str
 
 
+PrefixBatch = collections.namedtuple("PrefixBatch", "sequences,alignment,label")
+
+
 def packing_collate_fn(sequences):
     sentences, labels = zip(*sequences)
-    firsts, seconds = zip(*sentences)
-    return (
+    first, second = zip(*sentences)
+    first = list(enumerate(first))
+    second = list(enumerate(second))
+    first.sort(key=lambda t: -len(t[1]))
+    second.sort(key=lambda t: -len(t[1]))
+    idx_first, first = zip(*first)
+    idx_second, second = zip(*second)
+    align = [idx_second.index(idx) for idx in idx_first]
+
+    return PrefixBatch(
         (
-            torch.nn.utils.rnn.pad_sequence(firsts),
-            torch.nn.utils.rnn.pad_sequence(seconds),
+            torch.nn.utils.rnn.pack_sequence(first),
+            torch.nn.utils.rnn.pack_sequence(second),
         ),
-        torch.tensor(labels),
+        torch.tensor(align),
+        torch.tensor(labels)[list(idx_first)],
     )
 
 
