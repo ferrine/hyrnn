@@ -73,8 +73,9 @@ def mobius_gru_loop(
     weight_hh: torch.Tensor,
     bias: torch.Tensor,
     c: torch.Tensor,
-    hyperbolic_input: bool,
-    hyperbolic_hidden_state0: bool,
+    batch_sizes=None,
+    hyperbolic_input: bool = False,
+    hyperbolic_hidden_state0: bool = False,
     nonlin=None,
 ):
     if not hyperbolic_hidden_state0:
@@ -84,19 +85,34 @@ def mobius_gru_loop(
     if not hyperbolic_input:
         input = pmath.expmap0(input, c=c)
     outs = []
-    input_unbinded = input.unbind(0)
-    for t in range(input.size(0)):
-        hx = mobius_gru_cell(
-            input=input_unbinded[t],
-            hx=hx,
-            weight_ih=weight_ih,
-            weight_hh=weight_hh,
-            bias=bias,
-            nonlin=nonlin,
-            c=c,
-        )
-        outs.append(hx)
-    outs = torch.stack(outs)
+    if batch_sizes is None:
+        input_unbinded = input.unbind(0)
+        for t in range(input.size(0)):
+            hx = mobius_gru_cell(
+                input=input_unbinded[t],
+                hx=hx,
+                weight_ih=weight_ih,
+                weight_hh=weight_hh,
+                bias=bias,
+                nonlin=nonlin,
+                c=c,
+            )
+            outs.append(hx)
+        outs = torch.stack(outs)
+    else:
+        for t in range(batch_sizes.size(0)):
+            ix, input = input[:batch_sizes[t]], input[batch_sizes[t]:]
+            hx = mobius_gru_cell(
+                input=ix,
+                hx=hx[:batch_sizes[t]],
+                weight_ih=weight_ih,
+                weight_hh=weight_hh,
+                bias=bias,
+                nonlin=nonlin,
+                c=c,
+            )
+            outs.append(hx)
+        outs = torch.cat(outs)
     return outs
 
 
@@ -230,6 +246,7 @@ class MobiusGRU(torch.nn.Module):
             hyperbolic_hidden_state0=self.hyperbolic_hidden_state0,
             hyperbolic_input=self.hyperbolic_input,
             nonlin=self.nonlin,
+            batch_sizes=batch_sizes
         )
         if is_packed:
             ht = extract_last_states(outs, batch_sizes)
