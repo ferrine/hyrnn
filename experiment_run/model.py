@@ -74,6 +74,7 @@ class RNNBase(nn.Module):
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
         self.c = c
+        self.linear = nn.Linear(5*2+1,2)
 
         if cell_type == "eucl_rnn":
             self.cell = nn.RNN
@@ -121,6 +122,17 @@ class RNNBase(nn.Module):
         # take hiddens from the last layer
         source_hidden = source_hidden[-1]
         target_hidden = target_hidden[-1][alignment]
+
+
+        dist = torch.unsqueeze(torch.norm(source_hidden - target_hidden, dim=1), 1)
+
+        hidden = torch.cat((target_hidden, source_hidden, dist), dim=1)
+
+        hidden = self.softmax(self.linear(hidden))
+
+        return hidden
+
+
         if self.decision_type == "hyp":
             if "eucl" in self.cell_type:
                 source_hidden = pmath.expmap0(source_hidden, c=self.c)
