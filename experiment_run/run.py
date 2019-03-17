@@ -2,12 +2,11 @@ import sys
 
 sys.path.append("..")
 
-import numpy as np
 import argparse
 
 import torch
 import torch.nn as nn
-
+import geoopt
 import prefix_dataset
 import model, runner
 
@@ -21,12 +20,23 @@ parser.add_argument("--data_class", type=int, help="", default=10)
 parser.add_argument("--num_epochs", type=int, help="", default=1)
 parser.add_argument("--log_dir", type=str, help="", default="./logdir")
 parser.add_argument("--batch_size", type=int, help="", default=64)
-parser.add_argument("--vocab_size", type=int, help="", default=0)
-parser.add_argument("--hidden_size", type=int, help="", default=5)
-parser.add_argument("--dim_size", type=int, help="", default=5)
+
+parser.add_argument("--embedding_dim", type=int, help="", default=5)
+parser.add_argument("--hidden_dim", type=int, help="", default=5)
+parser.add_argument("--project_dim", type=int, help="", default=5)
+parser.add_argument("--use_distance_as_feature", action="store_true")
+
+
 parser.add_argument("--cell_type", type=str, help="", default="eucl_rnn")
 parser.add_argument("--num_layers", type=int, help="", default=1)
 parser.add_argument("--verbose", type=bool, help="", default=True)
+parser.add_argument("--cell_type", choices=("hyp_gru", "eucl_rnn", "eucl_gru"))
+parser.add_argument("--decision_type", choices=("hyp", "eucl"))
+parser.add_argument("--embedding_type", choices=("hyp", "eucl"))
+parser.add_argument("--lr", type=float, default=3e-4)
+parser.add_argument("--adam", action="store_true")
+parser.add_argument("--adam_betas", default="0.9,0.999")
+parser.add_argument("--order", type=int, default=1)
 
 
 args = parser.parse_args()
@@ -55,23 +65,28 @@ loader_test = torch.utils.data.DataLoader(
     dataset_test, batch_size=batch_size, collate_fn=prefix_dataset.packing_collate_fn
 )
 
-vocab_size = args.vocab_size
-dim_size = args.dim_size
-hidden_size = args.hidden_size
-cell = args.cell_type
-num_layers = args.num_layers
 
 model = model.RNNBase(
-    vocab_size,
-    dim_size,
-    hidden_size,
-    cell_type=cell,
+    dataset_train.vocab_size,
+    embedding_dim=args.embedding_dim,
+    hidden_dim=args.hidden_dim,
+    project_dim=args.project_dim,
+    cell_type=args.cell_type,
     device=device,
-    num_layers=num_layers,
+    num_layers=args.num_layers,
+    use_distance_as_feature=args.use_distance_as_feature,
+    num_classes=2,
 )
 
 criterion = nn.CrossEntropyLoss()
-optimizer = torch.optim.Adam(model.parameters())
+if args.adam:
+    optimizer = geoopt.optim.RiemannianAdam(
+        model.parameters(),
+        lr=args.lr,
+        betas=(float(args.adam_betas[0]), float(args.adam_betas[1])),
+    )
+else:
+    optimizer = geoopt.optim.RiemannianSGD(model.parameters(), args.lr)
 
 runner = runner.CustomRunner()
 
