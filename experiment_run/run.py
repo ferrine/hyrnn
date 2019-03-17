@@ -27,10 +27,11 @@ parser.add_argument("--project_dim", type=int, help="", default=5)
 parser.add_argument("--use_distance_as_feature", action="store_true")
 
 
-parser.add_argument("--cell_type", type=str, help="", default="eucl_rnn")
 parser.add_argument("--num_layers", type=int, help="", default=1)
 parser.add_argument("--verbose", type=bool, help="", default=True)
-parser.add_argument("--cell_type", choices=("hyp_gru", "eucl_rnn", "eucl_gru"))
+parser.add_argument(
+    "--cell_type", choices=("hyp_gru", "eucl_rnn", "eucl_gru"), default="eucl_gru"
+)
 parser.add_argument("--decision_type", choices=("hyp", "eucl"))
 parser.add_argument("--embedding_type", choices=("hyp", "eucl"))
 parser.add_argument("--lr", type=float, default=3e-4)

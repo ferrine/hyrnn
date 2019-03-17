@@ -43,4 +43,4 @@ if __name__ == "__main__":
         python_requires=">=3.6.0",
         license="Apache License, Version 2.0",
         classifiers=classifiers,
-        )
+    )

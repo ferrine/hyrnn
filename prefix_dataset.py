@@ -106,6 +106,7 @@ class PrefixDataset(torch.utils.data.Dataset):
     def vocab_size(self):
         return len(self.id2word)
 
+
 PrefixBatch = collections.namedtuple("PrefixBatch", "sequences,alignment,label")
 
 

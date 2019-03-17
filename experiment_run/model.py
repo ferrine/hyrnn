@@ -73,24 +73,26 @@ class RNNBase(nn.Module):
         self.device = device  # declaring device here due to fact we are using catalyst
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
+        self.c = c
+
         if cell_type == "eucl_rnn":
             self.cell = nn.RNN
         elif cell_type == "eucl_gru":
             self.cell = nn.GRU
         elif cell_type == "hyp_gru":
-            self.cell = functools.partial(hyrnn.MobiusGRU, order=order, c=c)
+            self.cell = functools.partial(hyrnn.MobiusGRU, c=c)
         else:
             raise NotImplementedError("Unsuported cell type: {0}".format(cell_type))
         self.cell_type = cell_type
 
-        self.cell_source = self.cell(embedding_dim, self.hidden_size, self.num_layers)
-        self.cell_target = self.cell(embedding_dim, self.hidden_size, self.num_layers)
+        self.cell_source = self.cell(embedding_dim, self.hidden_dim, self.num_layers)
+        self.cell_target = self.cell(embedding_dim, self.hidden_dim, self.num_layers)
 
     def forward(self, input):
         source_input = input[0]
         target_input = input[1]
-        alignment = input[3]
-        batch_size = source_input.shape[1]
+        alignment = input[2]
+        batch_size = alignment.shape[0]
 
         source_input = self.embedding(source_input)
         target_input = self.embedding(target_input)
@@ -98,7 +100,7 @@ class RNNBase(nn.Module):
         zero_hidden = torch.zeros(
             self.num_layers,
             batch_size,
-            self.hidden_size,
+            self.hidden_dim,
             device=self.device or source_input.device,
         )
 
@@ -125,7 +127,9 @@ class RNNBase(nn.Module):
                 source_projected, target_projected, c=self.ball.c
             )
             if self.use_distance_as_feature:
-                dist = pmath.dist(source_hidden, target_hidden, dim=-1, keepdim=True) ** 2
+                dist = (
+                    pmath.dist(source_hidden, target_hidden, dim=-1, keepdim=True) ** 2
+                )
                 bias = pmath.mobius_pointwise_mul(dist, self.dist_bias, c=self.ball.c)
                 projected = pmath.mobius_add(projected, bias, c=self.ball.c)
         else:
@@ -136,10 +140,12 @@ class RNNBase(nn.Module):
                 torch.cat((source_hidden, target_hidden), dim=-1)
             )
             if self.use_distance_as_feature:
-                dist = torch.sum((source_hidden - target_hidden).pow(2), dim=1, keepdim=True)
+                dist = torch.sum(
+                    (source_hidden - target_hidden).pow(2), dim=1, keepdim=True
+                )
                 bias = self.dist_bias * dist
                 projected = projected + bias
 
-        logits = self.decision(projected)
+        logits = self.logits(projected)
         # CrossEntropy accepts logits
         return logits
