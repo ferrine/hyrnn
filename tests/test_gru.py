@@ -5,15 +5,45 @@ import torch.nn
 def test_MobiusGRU_no_packed_just_works():
     input_size = 4
     hidden_size = 3
+    batch_size = 5
     gru = hyrnn.nets.MobiusGRU(
             input_size,
             hidden_size,
             hyperbolic_input=False)
     timestops = 10
-    sequence = torch.randn(timestops, 5, input_size)
-    h, ht = gru(sequence)
-    assert h.shape[0] == timestops
-    assert ht.shape[1] == 5
+    sequence = torch.randn(timestops, batch_size, input_size)
+    out, ht = gru(sequence)
+    # out: (seq_len, batch, num_directions * hidden_size)
+    # ht: (num_layers * num_directions, batch, hidden_size)
+    assert out.shape[0] == timestops
+    assert out.shape[1] == batch_size
+    assert out.shape[2] == hidden_size
+    assert ht.shape[0] == 1
+    assert ht.shape[1] == batch_size
+    assert ht.shape[2] == hidden_size
+
+
+def test_MobiusGRU_2_layers_no_packed_just_works():
+    input_size = 4
+    hidden_size = 3
+    batch_size = 5
+    num_layers = 2
+    gru = hyrnn.nets.MobiusGRU(
+            input_size,
+            hidden_size,
+            num_layers=num_layers,
+            hyperbolic_input=False)
+    timestops = 10
+    sequence = torch.randn(timestops, batch_size, input_size)
+    out, ht = gru(sequence)
+    # out: (seq_len, batch, num_directions * hidden_size)
+    # ht: (num_layers * num_directions, batch, hidden_size)
+    assert out.shape[0] == timestops
+    assert out.shape[1] == batch_size
+    assert out.shape[2] == hidden_size
+    assert ht.shape[0] == num_layers
+    assert ht.shape[1] == batch_size
+    assert ht.shape[2] == hidden_size
 
 
 def test_extract_last_states():
@@ -23,8 +53,8 @@ def test_extract_last_states():
         torch.tensor([7])
     ])
     data, bs = seqs
-    res = hyrnn.util.extract_last_states(data, bs)
-    assert (res == torch.tensor([3, 5, 7])).all()
+    indices = hyrnn.util.last_states_indices(bs)
+    assert (data[indices] == torch.tensor([3, 5, 7])).all()
 
 
 def test_mobius_gru_loop_just_works():

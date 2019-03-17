@@ -1,7 +1,7 @@
 import torch
 
 
-def extract_last_states(data, batch_sizes):
+def last_states_indices(batch_sizes):
     n_times = batch_sizes.size(0)
     n_sequences = batch_sizes[0]
     last = torch.zeros(n_sequences, dtype=torch.int64)
@@ -12,4 +12,5 @@ def extract_last_states(data, batch_sizes):
                 source=torch.ones(batch_sizes[i], dtype=torch.int64))
     indices = last.cumsum(0) - 1
     # indices = (last)_+
-    return data[indices.flip(0)]
+    return indices.flip(0)
+

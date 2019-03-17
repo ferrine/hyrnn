@@ -1,10 +1,10 @@
-import torch.jit
+import itertools
 import torch.nn
 import torch.nn.functional
 import math
 import geoopt.manifolds.poincare.math as pmath
 import geoopt
-from .util import extract_last_states
+from .util import last_states_indices
 
 
 def mobius_linear(
@@ -196,6 +196,7 @@ class MobiusGRU(torch.nn.Module):
         self,
         input_size,
         hidden_size,
+        num_layers=1,
         bias=True,
         nonlin=None,
         c=1.0,
@@ -206,16 +207,27 @@ class MobiusGRU(torch.nn.Module):
         self.ball = geoopt.PoincareBall(c=c)
         self.input_size = input_size
         self.hidden_size = hidden_size
+        self.num_layers = num_layers
         self.bias = bias
-        self.weight_ih = torch.nn.Parameter(torch.Tensor(3 * hidden_size, input_size))
-        self.weight_hh = torch.nn.Parameter(torch.Tensor(3 * hidden_size, hidden_size))
+        self.weight_ih = torch.nn.ParameterList([
+            torch.nn.Parameter(torch.Tensor(3 * hidden_size, input_size if i == 0 else hidden_size))
+            for i in range(num_layers)
+        ])
+        self.weight_hh = torch.nn.ParameterList([
+            torch.nn.Parameter(torch.Tensor(3 * hidden_size, hidden_size))
+            for i in range(num_layers)
+        ])
         if bias:
-            bias = torch.randn(3, hidden_size) * 1e-5
-            self.bias = geoopt.ManifoldParameter(
-                pmath.expmap0(bias, c=self.ball.c), manifold=self.ball
-            )
+            biases = []
+            for i in range(num_layers):
+                bias = torch.randn(3, hidden_size) * 1e-5
+                bias = geoopt.ManifoldParameter(
+                    pmath.expmap0(bias, c=self.ball.c), manifold=self.ball
+                )
+                biases.append(bias)
+            self.bias = torch.nn.ParameterList(biases)
         else:
-            self.register_parameter("bias", None)
+            self.register_buffer("bias", None)
         self.nonlin = nonlin
         self.hyperbolic_input = hyperbolic_input
         self.hyperbolic_hidden_state0 = hyperbolic_hidden_state0
@@ -223,7 +235,7 @@ class MobiusGRU(torch.nn.Module):
 
     def reset_parameters(self):
         stdv = 1.0 / math.sqrt(self.hidden_size)
-        for weight in self.parameters():
+        for weight in itertools.chain.from_iterable([self.weight_ih, self.weight_hh]):
             torch.nn.init.uniform_(weight, -stdv, stdv)
 
     def forward(self, input: torch.Tensor, h0=None):
@@ -232,37 +244,49 @@ class MobiusGRU(torch.nn.Module):
         is_packed = isinstance(input, torch.nn.utils.rnn.PackedSequence)
         if is_packed:
             input, batch_sizes = input
+            max_batch_size = int(batch_sizes[0])
         else:
             batch_sizes = None
+            max_batch_size = input.size(1)
         if h0 is None:
-            h0 = input.new_zeros(input.size(1), self.hidden_size, requires_grad=False)
-        outs = mobius_gru_loop(
-            input=input,
-            h0=h0,
-            weight_ih=self.weight_ih,
-            weight_hh=self.weight_hh,
-            bias=self.bias,
-            c=self.ball.c,
-            hyperbolic_hidden_state0=self.hyperbolic_hidden_state0,
-            hyperbolic_input=self.hyperbolic_input,
-            nonlin=self.nonlin,
-            batch_sizes=batch_sizes
-        )
+            h0 = input.new_zeros(self.num_layers, max_batch_size, self.hidden_size, requires_grad=False)
+        h0 = h0.unbind(0)
+        if self.bias is not None:
+            biases = self.bias
+        else:
+            biases = (None, ) * self.num_layers
+        outputs = []
+        out = input
+        for i in range(self.num_layers):
+            out = mobius_gru_loop(
+                input=out,
+                h0=h0[i],
+                weight_ih=self.weight_ih[i],
+                weight_hh=self.weight_hh[i],
+                bias=biases[i],
+                c=self.ball.c,
+                hyperbolic_hidden_state0=self.hyperbolic_hidden_state0 and i == 0,
+                hyperbolic_input=self.hyperbolic_input and i == 0,
+                nonlin=self.nonlin,
+                batch_sizes=batch_sizes
+            )
+            outputs.append(out)
         if is_packed:
-            ht = extract_last_states(outs, batch_sizes)
-            outs = torch.nn.utils.rnn.PackedSequence(outs, batch_sizes)
+            last_states = last_states_indices(batch_sizes)
+            ht = torch.stack(tuple(o[last_states] for o in outputs))
+            out = torch.nn.utils.rnn.PackedSequence(out, batch_sizes)
             # TODO: separate out into a util function
             # TODO: find means to vectorize, or at least rewrite in C++
         else:
-            ht = outs[-1]
+            ht = torch.stack(tuple(o[-1] for o in outputs))
         # default api assumes
         # outs: seq_len x batch_size x hidden_size
         # ht  : 1 x batch_size x hidden_size
-        return outs, ht.unsqueeze(0)
+        return out, ht
 
     def extra_repr(self):
         return (
-            "{input_size}, {hidden_size}, bias={bias}, "
+            "{input_size}, {hidden_size}, {num_layers}, bias={bias}, "
             "hyperbolic_input={hyperbolic_input}, "
             "hyperbolic_hidden_state0={hyperbolic_hidden_state0}, "
             "c={self.ball.c}"

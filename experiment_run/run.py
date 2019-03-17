@@ -6,7 +6,6 @@ import argparse
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 import prefix_dataset
 import model, runner
@@ -31,7 +30,7 @@ parser.add_argument("--verbose", type=bool, help="", default=True)
 
 args = parser.parse_args()
 
-device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 data_dir = args.data_dir
 logdir = args.log_dir
 
