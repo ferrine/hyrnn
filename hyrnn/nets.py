@@ -238,7 +238,10 @@ class MobiusGRU(torch.nn.Module):
             # TODO: find means to vectorize, or at least rewrite in C++
         else:
             ht = outs[-1]
-        return outs, ht
+        # default api assumes
+        # outs: seq_len x batch_size x hidden_size
+        # ht  : 1 x batch_size x hidden_size
+        return outs, ht.unsqueeze(0)
 
     def extra_repr(self):
         return (
