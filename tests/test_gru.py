@@ -97,4 +97,31 @@ def test_MobiusGRU_with_packed_just_works():
         ])
     h, ht = gru(seqs)
     assert h.data.size(0) == 16  # sum of times
-    assert ht.size(1) == 3
+    assert h.data.size(1) == hidden_size
+    # ht: (num_layers * num_directions, batch, hidden_size)
+    assert ht.size(2) == hidden_size
+    assert ht.size(1) == 3  # batch size
+    assert ht.size(0) == 1  # num layers
+
+
+def test_MobiusGRU_2_layers_with_packed_just_works():
+    input_size = 4
+    hidden_size = 3
+    gru = hyrnn.nets.MobiusGRU(
+        input_size,
+        hidden_size,
+        num_layers=2,
+        hyperbolic_input=False)
+    seqs = torch.nn.utils.rnn.pack_sequence([
+        torch.zeros(10, input_size),
+        torch.zeros(5, input_size),
+        torch.zeros(1, input_size)
+        ])
+    h, ht = gru(seqs)
+    assert h.data.size(0) == 16  # sum of times
+    assert h.data.size(1) == hidden_size
+    # ht: (num_layers * num_directions, batch, hidden_size)
+    assert ht.size(2) == hidden_size
+    assert ht.size(1) == 3  # batch size
+    assert ht.size(0) == 2  # num layers
+
