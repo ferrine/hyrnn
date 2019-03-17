@@ -30,7 +30,11 @@ class RNNBase(nn.Module):
             decision_type,
         ) = map(str.lower, [cell_type, embedding_type, decision_type])
         if embedding_type == "eucl":
-            self.embedding = nn.Embedding(vocab_size, embedding_dim)
+            self.embedding = hyrnn.LookupEmbedding(
+                vocab_size, embedding_dim, manifold=geoopt.Euclidean())
+        elif embedding_type == "hyp":
+            self.embedding = hyrnn.LookupEmbedding(
+                vocab_size, embedding_dim, manifold=geoopt.PoincareBall(c=c).set_default_order(order))
         else:
             raise NotImplementedError("Unsuported embedding type: {0}".format(embedding_type))
         self.embedding_type = embedding_type
