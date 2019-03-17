@@ -4,6 +4,7 @@ import torch.nn.functional
 import math
 import geoopt.manifolds.poincare.math as pmath
 import geoopt
+from .util import extract_last_states
 
 
 def mobius_linear(
@@ -231,8 +232,13 @@ class MobiusGRU(torch.nn.Module):
             nonlin=self.nonlin,
         )
         if is_packed:
+            ht = extract_last_states(outs, batch_sizes)
             outs = torch.nn.utils.rnn.PackedSequence(outs, batch_sizes)
-        return outs
+            # TODO: separate out into a util function
+            # TODO: find means to vectorize, or at least rewrite in C++
+        else:
+            ht = outs[-1]
+        return outs, ht
 
     def extra_repr(self):
         return (
