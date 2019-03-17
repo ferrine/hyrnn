@@ -111,6 +111,7 @@ def mobius_gru_loop(
                 nonlin=nonlin,
                 c=c,
             )
+            hx = pmath.project(hx, c=c)
             outs.append(hx)
         outs = torch.cat(outs)
     return outs
@@ -133,7 +134,7 @@ class MobiusLinear(torch.nn.Linear):
                 self.ball = manifold = geoopt.PoincareBall(c=c).set_default_order(order)
                 self.bias = geoopt.ManifoldParameter(self.bias, manifold=manifold)
                 with torch.no_grad():
-                    self.bias.set_(pmath.expmap0(self.bias.normal_() / 2, c=c))
+                    self.bias.set_(pmath.expmap0(self.bias.normal_() / 10, c=c))
         with torch.no_grad():
             self.weight.normal_(std=1e-2)
         self.hyperbolic_bias = hyperbolic_bias
@@ -169,7 +170,7 @@ class MobiusDist2Hyperplane(torch.nn.Module):
         self.ball = ball = geoopt.PoincareBall(c=c).set_default_order(order)
         self.sphere = sphere = geoopt.manifolds.Sphere().set_default_order(order)
         self.scale = torch.nn.Parameter(torch.zeros(out_features))
-        point = torch.randn(out_features, in_features) / 2
+        point = torch.randn(out_features, in_features) / 10
         point = pmath.expmap0(point, c=c)
         tangent = torch.randn(out_features, in_features)
         self.point = geoopt.ManifoldParameter(point, manifold=ball).proj_()

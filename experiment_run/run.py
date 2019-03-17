@@ -86,9 +86,10 @@ if args.adam:
         model.parameters(),
         lr=args.lr,
         betas=(float(adam_betas[0]), float(adam_betas[1])),
+        stabilize=10,
     )
 else:
-    optimizer = geoopt.optim.RiemannianSGD(model.parameters(), args.lr)
+    optimizer = geoopt.optim.RiemannianSGD(model.parameters(), args.lr, stabilize=10)
 
 runner = runner.CustomRunner()
 runner.train(

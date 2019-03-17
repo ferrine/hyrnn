@@ -31,12 +31,18 @@ class RNNBase(nn.Module):
             self.embedding = hyrnn.LookupEmbedding(
                 vocab_size, embedding_dim, manifold=geoopt.Euclidean()
             )
+            with torch.no_grad():
+                self.embedding.weight.normal_()
         elif embedding_type == "hyp":
             self.embedding = hyrnn.LookupEmbedding(
                 vocab_size,
                 embedding_dim,
                 manifold=geoopt.PoincareBall(c=c).set_default_order(order),
             )
+            with torch.no_grad():
+                self.embedding.weight.set_(
+                    pmath.expmap0(self.embedding.weight.normal_() / 10, c=c)
+                )
         else:
             raise NotImplementedError(
                 "Unsuported embedding type: {0}".format(embedding_type)
@@ -74,7 +80,7 @@ class RNNBase(nn.Module):
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
         self.c = c
-        self.linear = nn.Linear(5 * 2 + 1, 2)
+        self.linear = nn.Linear(5*2+1,2)
 
         if cell_type == "eucl_rnn":
             self.cell = nn.RNN
