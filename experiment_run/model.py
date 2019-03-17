@@ -94,8 +94,8 @@ class RNNBase(nn.Module):
         alignment = input[2]
         batch_size = alignment.shape[0]
 
-        source_input = self.embedding(source_input)
-        target_input = self.embedding(target_input)
+        source_input_data = self.embedding(source_input.data)
+        target_input_data = self.embedding(target_input.data)
 
         zero_hidden = torch.zeros(
             self.num_layers,
@@ -105,12 +105,16 @@ class RNNBase(nn.Module):
         )
 
         if self.embedding_type == "eucl" and "hyp" in self.cell_type:
-            source_input = pmath.expmap0(source_input, c=self.c)
-            target_input = pmath.expmap0(target_input, c=self.c)
+            source_input_data = pmath.expmap0(source_input_data, c=self.c)
+            target_input_data = pmath.expmap0(target_input_data, c=self.c)
         elif self.embedding_type == "hyp" and "eucl" in self.cell_type:
-            source_input = pmath.logmap0(source_input, c=self.c)
-            target_input = pmath.logmap0(target_input, c=self.c)
+            source_input_data = pmath.logmap0(source_input_data, c=self.c)
+            target_input_data = pmath.logmap0(target_input_data, c=self.c)
         # ht: (num_layers * num_directions, batch, hidden_size)
+
+        source_input = torch.nn.utils.rnn.PackedSequence(source_input_data, source_input.batch_sizes)
+        target_input = torch.nn.utils.rnn.PackedSequence(target_input_data, target_input.batch_sizes)
+
         _, source_hidden = self.cell_source(source_input, zero_hidden)
         _, target_hidden = self.cell_target(target_input, zero_hidden)
 

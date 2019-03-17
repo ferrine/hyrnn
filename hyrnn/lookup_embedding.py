@@ -59,6 +59,6 @@ class LookupEmbedding(Module):
             self.weight.fill_(0)
 
     def forward(self, input):
-        shape = list(input.data.shape) + list(self.weight.shape[1:])
+        shape = list(input.shape) + list(self.weight.shape[1:])
         shape = tuple(shape)
-        return self.weight.index_select(0, input.data.reshape(-1)).view(shape)
+        return self.weight.index_select(0, input.reshape(-1)).view(shape)
