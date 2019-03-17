@@ -125,7 +125,7 @@ class RNNBase(nn.Module):
                 source_projected, target_projected, c=self.ball.c
             )
             if self.use_distance_as_feature:
-                dist = pmath.dist(source_hidden, target_hidden, dim=-1)
+                dist = pmath.dist(source_hidden, target_hidden, dim=-1, keepdim=True) ** 2
                 bias = pmath.mobius_pointwise_mul(dist, self.dist_bias, c=self.ball.c)
                 projected = pmath.mobius_add(projected, bias, c=self.ball.c)
         else:
@@ -136,7 +136,7 @@ class RNNBase(nn.Module):
                 torch.cat((source_hidden, target_hidden), dim=-1)
             )
             if self.use_distance_as_feature:
-                dist = torch.norm(source_hidden - target_hidden, dim=1, keepdim=True)
+                dist = torch.sum((source_hidden - target_hidden).pow(2), dim=1, keepdim=True)
                 bias = self.dist_bias * dist
                 projected = projected + bias
 
