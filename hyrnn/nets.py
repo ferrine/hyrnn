@@ -134,7 +134,7 @@ class MobiusLinear(torch.nn.Linear):
                 self.ball = manifold = geoopt.PoincareBall(c=c).set_default_order(order)
                 self.bias = geoopt.ManifoldParameter(self.bias, manifold=manifold)
                 with torch.no_grad():
-                    self.bias.set_(pmath.expmap0(self.bias.normal_() / 10, c=c))
+                    self.bias.set_(pmath.expmap0(self.bias.normal_() / 4, c=c))
         with torch.no_grad():
             self.weight.normal_(std=1e-2)
         self.hyperbolic_bias = hyperbolic_bias
@@ -170,11 +170,11 @@ class MobiusDist2Hyperplane(torch.nn.Module):
         self.ball = ball = geoopt.PoincareBall(c=c).set_default_order(order)
         self.sphere = sphere = geoopt.manifolds.Sphere().set_default_order(order)
         self.scale = torch.nn.Parameter(torch.zeros(out_features))
-        point = torch.randn(out_features, in_features) / 10
+        point = torch.randn(out_features, in_features) / 4
         point = pmath.expmap0(point, c=c)
         tangent = torch.randn(out_features, in_features)
-        self.point = geoopt.ManifoldParameter(point, manifold=ball).proj_()
-        self.tangent = geoopt.ManifoldParameter(tangent, manifold=sphere)
+        self.point = geoopt.ManifoldParameter(point, manifold=ball)
+        self.tangent = geoopt.ManifoldParameter(tangent, manifold=sphere).proj_()
 
     def forward(self, input):
         input = input.unsqueeze(-2)

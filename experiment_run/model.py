@@ -109,6 +109,7 @@ class RNNBase(nn.Module):
             batch_size,
             self.hidden_dim,
             device=self.device or source_input.device,
+            dtype=source_input_data.dtype
         )
 
         if self.embedding_type == "eucl" and "hyp" in self.cell_type:

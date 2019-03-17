@@ -4,7 +4,7 @@ sys.path.append("..")
 
 import argparse
 
-import torch
+import torch.utils.data
 import torch.nn as nn
 import geoopt
 import prefix_dataset
@@ -17,7 +17,7 @@ parser = argparse.ArgumentParser()
 
 parser.add_argument("--data_dir", type=str, help="", default="./data")
 parser.add_argument("--data_class", type=int, help="", default=10)
-parser.add_argument("--num_epochs", type=int, help="", default=1)
+parser.add_argument("--num_epochs", type=int, help="", default=100)
 parser.add_argument("--log_dir", type=str, help="", default="./logdir")
 parser.add_argument("--batch_size", type=int, help="", default=64)
 
@@ -35,9 +35,12 @@ parser.add_argument(
 parser.add_argument("--decision_type", choices=("hyp", "eucl"), default="eucl")
 parser.add_argument("--embedding_type", choices=("hyp", "eucl"), default="eucl")
 parser.add_argument("--lr", type=float, default=3e-4)
-parser.add_argument("--adam", type=bool, default=True)
+parser.add_argument("--sgd", action='store_true')
 parser.add_argument("--adam_betas", type=str, default="0.9,0.999")
+parser.add_argument("--wd", type=float, default=0.)
 parser.add_argument("--order", type=int, default=1)
+parser.add_argument("--c", type=float, default=1.)
+parser.add_argument("--j", type=int, default=1)
 
 
 args = parser.parse_args()
@@ -60,7 +63,8 @@ dataset_test = prefix_dataset.PrefixDataset(
 )
 
 loader_train = torch.utils.data.DataLoader(
-    dataset_train, batch_size=batch_size, collate_fn=prefix_dataset.packing_collate_fn
+    dataset_train, batch_size=batch_size, collate_fn=prefix_dataset.packing_collate_fn,
+    shuffle=True, num_workers=args.j,
 )
 
 loader_test = torch.utils.data.DataLoader(
@@ -78,18 +82,23 @@ model = model.RNNBase(
     num_layers=args.num_layers,
     use_distance_as_feature=args.use_distance_as_feature,
     num_classes=2,
-)
+    order=args.order,
+    c=args.c
+).double()
 
 criterion = nn.CrossEntropyLoss()
-if args.adam:
+if not args.sgd:
     optimizer = geoopt.optim.RiemannianAdam(
         model.parameters(),
         lr=args.lr,
         betas=(float(adam_betas[0]), float(adam_betas[1])),
         stabilize=10,
+        weight_decay=args.wd
     )
 else:
-    optimizer = geoopt.optim.RiemannianSGD(model.parameters(), args.lr, stabilize=10)
+    optimizer = geoopt.optim.RiemannianSGD(
+        model.parameters(), args.lr, stabilize=10,
+        weight_decay=args.wd)
 
 runner = runner.CustomRunner()
 runner.train(
