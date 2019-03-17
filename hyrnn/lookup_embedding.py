@@ -28,7 +28,10 @@ class LookupEmbedding(Module):
         - Input: :math:`(*)`, LongTensor of arbitrary shape containing the indices to extract
         - Output: :math:`(*, H)`, where `*` is the input shape and :math:`H=\text{embedding\_dim}`
     """
-    def __init__(self, num_embeddings, embedding_dim, manifold=geoopt.Euclidean(), _weight=None):
+
+    def __init__(
+        self, num_embeddings, embedding_dim, manifold=geoopt.Euclidean(), _weight=None
+    ):
         super(LookupEmbedding, self).__init__()
         if isinstance(embedding_dim, int):
             embedding_dim = (embedding_dim,)
@@ -39,8 +42,10 @@ class LookupEmbedding(Module):
             self.weight = geoopt.ManifoldParameter(_weight, manifold=manifold)
             self.reset_parameters()
         else:
-            assert _weight.shape == (num_embeddings, *embedding_dim), \
-                   '_weight MUST be of shape (num_embeddings, *embedding_dim)'
+            assert _weight.shape == (
+                num_embeddings,
+                *embedding_dim,
+            ), "_weight MUST be of shape (num_embeddings, *embedding_dim)"
             self.weight = geoopt.ManifoldParameter(_weight, manifold=manifold)
 
     def reset_parameters(self):

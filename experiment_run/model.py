@@ -24,35 +24,47 @@ class RNNBase(nn.Module):
         order=1,
     ):
         super(RNNBase, self).__init__()
-        (
-            cell_type,
-            embedding_type,
-            decision_type,
-        ) = map(str.lower, [cell_type, embedding_type, decision_type])
+        (cell_type, embedding_type, decision_type) = map(
+            str.lower, [cell_type, embedding_type, decision_type]
+        )
         if embedding_type == "eucl":
             self.embedding = hyrnn.LookupEmbedding(
-                vocab_size, embedding_dim, manifold=geoopt.Euclidean())
+                vocab_size, embedding_dim, manifold=geoopt.Euclidean()
+            )
         elif embedding_type == "hyp":
             self.embedding = hyrnn.LookupEmbedding(
-                vocab_size, embedding_dim, manifold=geoopt.PoincareBall(c=c).set_default_order(order))
+                vocab_size,
+                embedding_dim,
+                manifold=geoopt.PoincareBall(c=c).set_default_order(order),
+            )
         else:
-            raise NotImplementedError("Unsuported embedding type: {0}".format(embedding_type))
+            raise NotImplementedError(
+                "Unsuported embedding type: {0}".format(embedding_type)
+            )
         self.embedding_type = embedding_type
         if decision_type == "eucl":
             self.projector = nn.Linear(hidden_dim * 2, project_dim)
             self.logits = nn.Linear(project_dim, num_classes)
         elif decision_type == "hyp":
-            self.projector_source = hyrnn.MobiusLinear(hidden_dim, project_dim, c=c, order=order)
-            self.projector_target = hyrnn.MobiusLinear(hidden_dim, project_dim, c=c, order=order)
+            self.projector_source = hyrnn.MobiusLinear(
+                hidden_dim, project_dim, c=c, order=order
+            )
+            self.projector_target = hyrnn.MobiusLinear(
+                hidden_dim, project_dim, c=c, order=order
+            )
             self.logits = hyrnn.MobiusDist2Hyperplane(project_dim, num_classes)
         else:
-            raise NotImplementedError("Unsuported decision type: {0}".format(decision_type))
+            raise NotImplementedError(
+                "Unsuported decision type: {0}".format(decision_type)
+            )
         self.ball = geoopt.PoincareBall(c).set_default_order(order)
         if use_distance_as_feature:
             if decision_type == "eucl":
                 self.dist_bias = nn.Parameter(torch.zeros(project_dim))
             else:
-                self.dist_bias = geoopt.ManifoldParameter(torch.zeros(project_dim), manifold=self.ball)
+                self.dist_bias = geoopt.ManifoldParameter(
+                    torch.zeros(project_dim), manifold=self.ball
+                )
         else:
             self.register_buffer("dist_bias", None)
         self.decision_type = decision_type
@@ -83,8 +95,12 @@ class RNNBase(nn.Module):
         source_input = self.embedding(source_input)
         target_input = self.embedding(target_input)
 
-        zero_hidden = torch.zeros(self.num_layers, batch_size, self.hidden_size,
-                                  device=self.device or source_input.device)
+        zero_hidden = torch.zeros(
+            self.num_layers,
+            batch_size,
+            self.hidden_size,
+            device=self.device or source_input.device,
+        )
 
         if self.embedding_type == "eucl" and "hyp" in self.cell_type:
             source_input = pmath.expmap0(source_input, c=self.c)
@@ -105,7 +121,9 @@ class RNNBase(nn.Module):
                 target_hidden = pmath.expmap0(target_hidden, c=self.c)
             source_projected = self.projector_source(source_hidden)
             target_projected = self.projector_target(target_hidden)
-            projected = pmath.mobius_add(source_projected, target_projected, c=self.ball.c)
+            projected = pmath.mobius_add(
+                source_projected, target_projected, c=self.ball.c
+            )
             if self.use_distance_as_feature:
                 dist = pmath.dist(source_hidden, target_hidden, dim=-1)
                 bias = pmath.mobius_pointwise_mul(dist, self.dist_bias, c=self.ball.c)
@@ -114,7 +132,9 @@ class RNNBase(nn.Module):
             if "hyp" in self.cell_type:
                 source_hidden = pmath.logmap0(source_hidden, c=self.c)
                 target_hidden = pmath.logmap0(target_hidden, c=self.c)
-            projected = self.projector(torch.cat((source_hidden, target_hidden), dim=-1))
+            projected = self.projector(
+                torch.cat((source_hidden, target_hidden), dim=-1)
+            )
             if self.use_distance_as_feature:
                 dist = torch.norm(source_hidden - target_hidden, dim=1, keepdim=True)
                 bias = self.dist_bias * dist

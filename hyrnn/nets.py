@@ -101,10 +101,10 @@ def mobius_gru_loop(
         outs = torch.stack(outs)
     else:
         for t in range(batch_sizes.size(0)):
-            ix, input = input[:batch_sizes[t]], input[batch_sizes[t]:]
+            ix, input = input[: batch_sizes[t]], input[batch_sizes[t] :]
             hx = mobius_gru_cell(
                 input=ix,
-                hx=hx[:batch_sizes[t]],
+                hx=hx[: batch_sizes[t]],
                 weight_ih=weight_ih,
                 weight_hh=weight_hh,
                 bias=bias,
@@ -209,14 +209,20 @@ class MobiusGRU(torch.nn.Module):
         self.hidden_size = hidden_size
         self.num_layers = num_layers
         self.bias = bias
-        self.weight_ih = torch.nn.ParameterList([
-            torch.nn.Parameter(torch.Tensor(3 * hidden_size, input_size if i == 0 else hidden_size))
-            for i in range(num_layers)
-        ])
-        self.weight_hh = torch.nn.ParameterList([
-            torch.nn.Parameter(torch.Tensor(3 * hidden_size, hidden_size))
-            for i in range(num_layers)
-        ])
+        self.weight_ih = torch.nn.ParameterList(
+            [
+                torch.nn.Parameter(
+                    torch.Tensor(3 * hidden_size, input_size if i == 0 else hidden_size)
+                )
+                for i in range(num_layers)
+            ]
+        )
+        self.weight_hh = torch.nn.ParameterList(
+            [
+                torch.nn.Parameter(torch.Tensor(3 * hidden_size, hidden_size))
+                for i in range(num_layers)
+            ]
+        )
         if bias:
             biases = []
             for i in range(num_layers):
@@ -249,12 +255,14 @@ class MobiusGRU(torch.nn.Module):
             batch_sizes = None
             max_batch_size = input.size(1)
         if h0 is None:
-            h0 = input.new_zeros(self.num_layers, max_batch_size, self.hidden_size, requires_grad=False)
+            h0 = input.new_zeros(
+                self.num_layers, max_batch_size, self.hidden_size, requires_grad=False
+            )
         h0 = h0.unbind(0)
         if self.bias is not None:
             biases = self.bias
         else:
-            biases = (None, ) * self.num_layers
+            biases = (None,) * self.num_layers
         outputs = []
         out = input
         for i in range(self.num_layers):
@@ -268,7 +276,7 @@ class MobiusGRU(torch.nn.Module):
                 hyperbolic_hidden_state0=self.hyperbolic_hidden_state0 and i == 0,
                 hyperbolic_input=self.hyperbolic_input and i == 0,
                 nonlin=self.nonlin,
-                batch_sizes=batch_sizes
+                batch_sizes=batch_sizes,
             )
             outputs.append(out)
         if is_packed:
