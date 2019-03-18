@@ -43,7 +43,7 @@ def test_MobiusGRU_2_layers_no_packed_just_works():
 
 def test_extract_last_states():
     seqs = torch.nn.utils.rnn.pack_sequence(
-        [torch.tensor([1, 2, 3]), torch.tensor([4, 5]), torch.tensor([7])]
+        [torch.tensor([1, 2, 4, 8, 3]), torch.tensor([4, 9, 5]), torch.tensor([7])]
     )
     data, bs = seqs
     indices = hyrnn.util.last_states_indices(bs)
