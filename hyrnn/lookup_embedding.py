@@ -37,16 +37,18 @@ class LookupEmbedding(Module):
             embedding_dim = (embedding_dim,)
         self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
+        self.manifold = manifold
+
         if _weight is None:
             _weight = torch.Tensor(num_embeddings, *embedding_dim)
-            self.weight = geoopt.ManifoldParameter(_weight, manifold=manifold)
+            self.weight = geoopt.ManifoldParameter(_weight, manifold=self.manifold)
             self.reset_parameters()
         else:
             assert _weight.shape == (
                 num_embeddings,
                 *embedding_dim,
             ), "_weight MUST be of shape (num_embeddings, *embedding_dim)"
-            self.weight = geoopt.ManifoldParameter(_weight, manifold=manifold)
+            self.weight = geoopt.ManifoldParameter(_weight, manifold=self.manifold)
 
     def reset_parameters(self):
         # TODO: allow some sort of InitPolicy

@@ -24,7 +24,7 @@ parser.add_argument("--batch_size", type=int, help="", default=64)
 parser.add_argument("--embedding_dim", type=int, help="", default=5)
 parser.add_argument("--hidden_dim", type=int, help="", default=5)
 parser.add_argument("--project_dim", type=int, help="", default=5)
-parser.add_argument("--use_distance_as_feature", action="store_true", default='True')
+parser.add_argument("--use_distance_as_feature", action="store_true", default="True")
 
 
 parser.add_argument("--num_layers", type=int, help="", default=1)
@@ -32,8 +32,8 @@ parser.add_argument("--verbose", type=bool, help="", default=True)
 parser.add_argument(
     "--cell_type", choices=("hyp_gru", "eucl_rnn", "eucl_gru"), default="eucl_gru"
 )
-parser.add_argument("--decision_type", choices=("hyp", "eucl"), default='eucl')
-parser.add_argument("--embedding_type", choices=("hyp", "eucl"), default='eucl')
+parser.add_argument("--decision_type", choices=("hyp", "eucl"), default="eucl")
+parser.add_argument("--embedding_type", choices=("hyp", "eucl"), default="eucl")
 parser.add_argument("--lr", type=float, default=3e-4)
 parser.add_argument("--adam", type=bool, default=True)
 parser.add_argument("--adam_betas", type=str, default="0.9,0.999")
@@ -49,7 +49,7 @@ logdir = args.log_dir
 n_epochs = args.num_epochs
 num = args.data_class
 batch_size = args.batch_size
-adam_betas = args.adam_betas.split(',')
+adam_betas = args.adam_betas.split(",")
 
 dataset_train = prefix_dataset.PrefixDataset(
     data_dir, num=num, split="train", download=True
@@ -91,7 +91,6 @@ else:
     optimizer = geoopt.optim.RiemannianSGD(model.parameters(), args.lr)
 
 runner = runner.CustomRunner()
-
 runner.train(
     model=model,
     criterion=criterion,
