@@ -117,6 +117,7 @@ def mobius_gru_loop(
                 h_last.append(ht)
             else:
                 h_last.append(hx)
+        h_last.reverse()
         h_last = torch.cat(h_last)
         outs = torch.cat(outs)
     return outs, h_last

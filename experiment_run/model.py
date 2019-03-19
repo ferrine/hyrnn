@@ -145,7 +145,7 @@ class RNNBase(nn.Module):
                 dist = (
                     pmath.dist(source_hidden, target_hidden, dim=-1, keepdim=True, c=self.ball.c) ** 2
                 )
-                bias = pmath.mobius_pointwise_mul(dist, self.dist_bias, c=self.ball.c)
+                bias = pmath.mobius_scalar_mul(dist, self.dist_bias, c=self.ball.c)
                 projected = pmath.mobius_add(projected, bias, c=self.ball.c)
         else:
             if "hyp" in self.cell_type:
