@@ -1,8 +1,10 @@
+import sys
+sys.path.append('..')
 import hyrnn
 import collections
 import torch
 import torch.nn as nn
-from model import RNNBase
+from experiment_run import model
 
 PrefixBatch = collections.namedtuple("PrefixBatch", "sequences,alignment,label")
 
@@ -18,7 +20,7 @@ def test_models():
 
 
 def test_model(cell_type, num_classes=2, batch_size=2):
-    model = RNNBase(
+    model_ = model.RNNBase(
         101,
         101,
         101,
@@ -43,7 +45,6 @@ def test_model(cell_type, num_classes=2, batch_size=2):
     )
     model_input = (input[0][0], input[0][1], input[1])
 
-    output = model(model_input)
+    output = model_(model_input)
     assert output.shape[0] == batch_size
     assert output.shape[1] == num_classes
-
