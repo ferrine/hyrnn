@@ -53,7 +53,8 @@ def mobius_gru_cell(
     z_t = pmath.logmap0(one_rnn_transform(W_hz, hx, W_iz, input, b_z, c)).sigmoid()
     r_t = pmath.logmap0(one_rnn_transform(W_hr, hx, W_ir, input, b_r, c)).sigmoid()
 
-    h_tilde = one_rnn_transform(W_hh * r_t.unsqueeze(-1), hx, W_ih, input, b_h, c)
+    rh_t = pmath.mobius_pointwise_mul(r_t, hx, c=c)
+    h_tilde = one_rnn_transform(W_hh, rh_t, W_ih, input, b_h, c)
 
     if nonlin is not None:
         h_tilde = pmath.mobius_fn_apply(nonlin, h_tilde, c=c)
@@ -280,8 +281,8 @@ class MobiusGRU(torch.nn.Module):
                 weight_hh=self.weight_hh[i],
                 bias=biases[i],
                 c=self.ball.c,
-                hyperbolic_hidden_state0=self.hyperbolic_hidden_state0 and i == 0,
-                hyperbolic_input=self.hyperbolic_input and i == 0,
+                hyperbolic_hidden_state0=self.hyperbolic_hidden_state0 or i > 0,
+                hyperbolic_input=self.hyperbolic_input or i > 0,
                 nonlin=self.nonlin,
                 batch_sizes=batch_sizes,
             )
@@ -289,8 +290,6 @@ class MobiusGRU(torch.nn.Module):
             last_states.append(h_last)
         if is_packed:
             out = torch.nn.utils.rnn.PackedSequence(out, batch_sizes)
-            # TODO: separate out into a util function
-            # TODO: find means to vectorize, or at least rewrite in C++
         ht = torch.stack(last_states)
         # default api assumes
         # out: (seq_len, batch, num_directions * hidden_size)
@@ -298,7 +297,6 @@ class MobiusGRU(torch.nn.Module):
         # if packed:
         # out: (sum(seq_len), num_directions * hidden_size)
         # ht: (num_layers * num_directions, batch, hidden_size)
-
         return out, ht
 
     def extra_repr(self):
