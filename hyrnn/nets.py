@@ -4,7 +4,6 @@ import torch.nn.functional
 import math
 import geoopt.manifolds.poincare.math as pmath
 import geoopt
-from .util import last_states_indices
 
 
 def mobius_linear(
@@ -31,6 +30,13 @@ def mobius_linear(
     return output
 
 
+def one_rnn_transform(W, h, U, x, b, c):
+    W_otimes_h = pmath.mobius_matvec(W, h, c=c)
+    U_otimes_x = pmath.mobius_matvec(U, x, c=c)
+    Wh_plus_Ux = pmath.mobius_add(W_otimes_h, U_otimes_x, c=c)
+    return pmath.mobius_add(Wh_plus_Ux, b, c=c)
+
+
 def mobius_gru_cell(
     input: torch.Tensor,
     hx: torch.Tensor,
@@ -44,20 +50,10 @@ def mobius_gru_cell(
     b_r, b_h, b_z = bias
     W_hr, W_hh, W_hz = weight_hh.chunk(3)
 
-    Wr_ht = pmath.mobius_matvec(W_hr, hx, c=c)
-    Wr_it = pmath.mobius_matvec(W_ir, input, c=c)
-    Wr_ht_plus_Wr_it = pmath.mobius_add(Wr_ht, Wr_it, c=c)
-    r_t = pmath.logmap0(pmath.mobius_add(Wr_ht_plus_Wr_it, b_r, c=c), c=c).sigmoid()
+    z_t = pmath.logmap0(one_rnn_transform(W_hz, hx, W_iz, input, b_z, c)).sigmoid()
+    r_t = pmath.logmap0(one_rnn_transform(W_hr, hx, W_ir, input, b_r, c)).sigmoid()
 
-    Wh_r_hx = pmath.mobius_matvec(W_hh * r_t.unsqueeze(1), hx, c=c)
-    Wh_it = pmath.mobius_matvec(W_ih, input, c=c)
-    Wh_r_hx_plus_Wh_it_b = pmath.mobius_add(Wh_r_hx, Wh_it, c=c)
-    h_tilde = pmath.mobius_add(Wh_r_hx_plus_Wh_it_b, b_h, c=c)
-
-    Wz_ht = pmath.mobius_matvec(W_hz, hx, c=c)
-    Wz_it = pmath.mobius_matvec(W_iz, input, c=c)
-    Wz_ht_plus_Wz_it = pmath.mobius_add(Wz_ht, Wz_it, c=c)
-    z_t = pmath.logmap0(pmath.mobius_add(Wz_ht_plus_Wz_it, b_z, c=c), c=c).sigmoid()
+    h_tilde = one_rnn_transform(W_hh * r_t.unsqueeze(-1), hx, W_ih, input, b_h, c)
 
     if nonlin is not None:
         h_tilde = pmath.mobius_fn_apply(nonlin, h_tilde, c=c)
@@ -99,22 +95,30 @@ def mobius_gru_loop(
             )
             outs.append(hx)
         outs = torch.stack(outs)
+        h_last = hx
     else:
-        for t in range(batch_sizes.size(0)):
+        h_last = []
+        T = len(batch_sizes) - 1
+        for i, t in enumerate(range(batch_sizes.size(0))):
             ix, input = input[: batch_sizes[t]], input[batch_sizes[t] :]
             hx = mobius_gru_cell(
                 input=ix,
-                hx=hx[: batch_sizes[t]],
+                hx=hx,
                 weight_ih=weight_ih,
                 weight_hh=weight_hh,
                 bias=bias,
                 nonlin=nonlin,
                 c=c,
             )
-            hx = pmath.project(hx, c=c)
             outs.append(hx)
+            if t < T:
+                hx, ht = hx[: batch_sizes[t+1]], hx[batch_sizes[t+1]:]
+                h_last.append(ht)
+            else:
+                h_last.append(hx)
+        h_last = torch.cat(h_last)
         outs = torch.cat(outs)
-    return outs
+    return outs, h_last
 
 
 class MobiusLinear(torch.nn.Linear):
@@ -200,12 +204,13 @@ class MobiusGRU(torch.nn.Module):
         num_layers=1,
         bias=True,
         nonlin=None,
-        c=1.0,
         hyperbolic_input=True,
         hyperbolic_hidden_state0=True,
+        c=1.0,
+        order=1,
     ):
         super().__init__()
-        self.ball = geoopt.PoincareBall(c=c)
+        self.ball = geoopt.PoincareBall(c=c).set_default_order(order)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -221,7 +226,7 @@ class MobiusGRU(torch.nn.Module):
         self.weight_hh = torch.nn.ParameterList(
             [
                 torch.nn.Parameter(torch.Tensor(3 * hidden_size, hidden_size))
-                for i in range(num_layers)
+                for _ in range(num_layers)
             ]
         )
         if bias:
@@ -265,9 +270,10 @@ class MobiusGRU(torch.nn.Module):
         else:
             biases = (None,) * self.num_layers
         outputs = []
+        last_states = []
         out = input
         for i in range(self.num_layers):
-            out = mobius_gru_loop(
+            out, h_last = mobius_gru_loop(
                 input=out,
                 h0=h0[i],
                 weight_ih=self.weight_ih[i],
@@ -280,17 +286,19 @@ class MobiusGRU(torch.nn.Module):
                 batch_sizes=batch_sizes,
             )
             outputs.append(out)
+            last_states.append(h_last)
         if is_packed:
-            last_states = last_states_indices(batch_sizes)
-            ht = torch.stack(tuple(o[last_states] for o in outputs))
             out = torch.nn.utils.rnn.PackedSequence(out, batch_sizes)
             # TODO: separate out into a util function
             # TODO: find means to vectorize, or at least rewrite in C++
-        else:
-            ht = torch.stack(tuple(o[-1] for o in outputs))
+        ht = torch.stack(last_states)
         # default api assumes
-        # outs: seq_len x batch_size x hidden_size
-        # ht  : 1 x batch_size x hidden_size
+        # out: (seq_len, batch, num_directions * hidden_size)
+        # ht: (num_layers * num_directions, batch, hidden_size)
+        # if packed:
+        # out: (sum(seq_len), num_directions * hidden_size)
+        # ht: (num_layers * num_directions, batch, hidden_size)
+
         return out, ht
 
     def extra_repr(self):
