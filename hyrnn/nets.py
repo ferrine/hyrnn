@@ -50,8 +50,8 @@ def mobius_gru_cell(
     b_r, b_h, b_z = bias
     W_hr, W_hh, W_hz = weight_hh.chunk(3)
 
-    z_t = pmath.logmap0(one_rnn_transform(W_hz, hx, W_iz, input, b_z, c)).sigmoid()
-    r_t = pmath.logmap0(one_rnn_transform(W_hr, hx, W_ir, input, b_r, c)).sigmoid()
+    z_t = pmath.logmap0(one_rnn_transform(W_hz, hx, W_iz, input, b_z, c), c=c).sigmoid()
+    r_t = pmath.logmap0(one_rnn_transform(W_hr, hx, W_ir, input, b_r, c), c=c).sigmoid()
 
     rh_t = pmath.mobius_pointwise_mul(r_t, hx, c=c)
     h_tilde = one_rnn_transform(W_hh, rh_t, W_ih, input, b_h, c)
