@@ -31,12 +31,18 @@ class RNNBase(nn.Module):
             self.embedding = hyrnn.LookupEmbedding(
                 vocab_size, embedding_dim, manifold=geoopt.Euclidean()
             )
+            with torch.no_grad():
+                self.embedding.weight.normal_()
         elif embedding_type == "hyp":
             self.embedding = hyrnn.LookupEmbedding(
                 vocab_size,
                 embedding_dim,
                 manifold=geoopt.PoincareBall(c=c).set_default_order(order),
             )
+            with torch.no_grad():
+                self.embedding.weight.set_(
+                    pmath.expmap0(self.embedding.weight.normal_() / 10, c=c)
+                )
         else:
             raise NotImplementedError(
                 "Unsuported embedding type: {0}".format(embedding_type)
@@ -69,19 +75,17 @@ class RNNBase(nn.Module):
             self.register_buffer("dist_bias", None)
         self.decision_type = decision_type
         self.use_distance_as_feature = use_distance_as_feature
-        self.softmax = nn.Softmax()
         self.device = device  # declaring device here due to fact we are using catalyst
         self.num_layers = num_layers
         self.hidden_dim = hidden_dim
         self.c = c
-        self.linear = nn.Linear(5 * 2 + 1, 2)
 
         if cell_type == "eucl_rnn":
             self.cell = nn.RNN
         elif cell_type == "eucl_gru":
             self.cell = nn.GRU
         elif cell_type == "hyp_gru":
-            self.cell = functools.partial(hyrnn.MobiusGRU, c=c)
+            self.cell = functools.partial(hyrnn.MobiusGRU, c=c, order=order)
         else:
             raise NotImplementedError("Unsuported cell type: {0}".format(cell_type))
         self.cell_type = cell_type
@@ -103,6 +107,7 @@ class RNNBase(nn.Module):
             batch_size,
             self.hidden_dim,
             device=self.device or source_input.device,
+            dtype=source_input_data.dtype
         )
 
         if self.embedding_type == "eucl" and "hyp" in self.cell_type:
@@ -138,9 +143,9 @@ class RNNBase(nn.Module):
             )
             if self.use_distance_as_feature:
                 dist = (
-                    pmath.dist(source_hidden, target_hidden, dim=-1, keepdim=True) ** 2
+                    pmath.dist(source_hidden, target_hidden, dim=-1, keepdim=True, c=self.ball.c) ** 2
                 )
-                bias = pmath.mobius_pointwise_mul(dist, self.dist_bias, c=self.ball.c)
+                bias = pmath.mobius_scalar_mul(dist, self.dist_bias, c=self.ball.c)
                 projected = pmath.mobius_add(projected, bias, c=self.ball.c)
         else:
             if "hyp" in self.cell_type:
@@ -151,7 +156,7 @@ class RNNBase(nn.Module):
             )
             if self.use_distance_as_feature:
                 dist = torch.sum(
-                    (source_hidden - target_hidden).pow(2), dim=1, keepdim=True
+                    (source_hidden - target_hidden).pow(2), dim=-1, keepdim=True
                 )
                 bias = self.dist_bias * dist
                 projected = projected + bias

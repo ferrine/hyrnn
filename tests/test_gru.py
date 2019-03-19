@@ -41,18 +41,10 @@ def test_MobiusGRU_2_layers_no_packed_just_works():
     assert ht.shape[2] == hidden_size
 
 
-def test_extract_last_states():
-    seqs = torch.nn.utils.rnn.pack_sequence(
-        [torch.tensor([1, 2, 4, 8, 3]), torch.tensor([4, 9, 5]), torch.tensor([7])]
-    )
-    data, bs = seqs
-    indices = hyrnn.util.last_states_indices(bs)
-    assert (data[indices] == torch.tensor([3, 5, 7])).all()
-
-
 def test_mobius_gru_loop_just_works():
     input_size = 4
     hidden_size = 3
+    num_sequences = 3
     seqs = torch.nn.utils.rnn.pack_sequence(
         [
             torch.zeros(10, input_size),
@@ -61,7 +53,7 @@ def test_mobius_gru_loop_just_works():
         ]
     )
     loop_params = dict()
-    loop_params["h0"] = torch.zeros(input_size, requires_grad=False)
+    loop_params["h0"] = torch.zeros(num_sequences, hidden_size, requires_grad=False)
     loop_params["input"] = seqs.data
     loop_params["weight_ih"] = torch.nn.Parameter(
         torch.randn(3 * hidden_size, input_size)
@@ -75,9 +67,7 @@ def test_mobius_gru_loop_just_works():
     loop_params["hyperbolic_input"] = True
     loop_params["hyperbolic_hidden_state0"] = True
     loop_params["batch_sizes"] = seqs.batch_sizes
-    outs = hyrnn.nets.mobius_gru_loop(**loop_params)
-
-    print(outs.shape)
+    hyrnn.nets.mobius_gru_loop(**loop_params)
 
 
 def test_MobiusGRU_with_packed_just_works():
