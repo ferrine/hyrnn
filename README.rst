@@ -1,2 +1,0 @@
-Hyperbolic RNN in Pytorch
-=========================
