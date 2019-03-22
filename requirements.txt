@@ -11,4 +11,4 @@ grpcio>=1.6.3
 tensorboardX
 torchnet
 catalyst
-git+https://github.com/geoopt/geoopt.git
+git+https://github.com/geoopt/geoopt.git@poincare

@@ -12,7 +12,8 @@ python -m pip install -r requirements.txt
 To reproduce the results from the Table 1 on the final report, run the following command:
 
 ```
-python experiment_run/run.py --data_dir=./data --num_epochs=30 --log_dir=./logs --batch_size=1024 --num_layers=2 --cell_type=hyp_gru
+cd ./experiment_run
+python run.py --data_dir=./data --num_epochs=30 --log_dir=./logs --batch_size=1024 --num_layers=2 --cell_type=hyp_gru
 ```
 
 where you can change the argument `cell_type=hyp_gru` to `cell_type=eucl_gru` if you want to run Euclidean version of GRU.
