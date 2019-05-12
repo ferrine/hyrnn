@@ -4,7 +4,7 @@ from setuptools import setup, find_packages
 
 DESCRIPTION = """Hyperbolic RNN"""
 PROJECT_ROOT = os.path.dirname(os.path.realpath(__file__))
-with open(os.path.join(PROJECT_ROOT, "README.rst"), encoding="utf-8") as buff:
+with open(os.path.join(PROJECT_ROOT, "README.md"), encoding="utf-8") as buff:
     LONG_DESCRIPTION = buff.read()
 
 
