@@ -40,7 +40,7 @@ class LookupEmbedding(Module):
         self.manifold = manifold
 
         if _weight is None:
-            _weight = torch.Tensor(num_embeddings, *embedding_dim)
+            _weight = torch.empty(num_embeddings, *embedding_dim)
             self.weight = geoopt.ManifoldParameter(_weight, manifold=self.manifold)
             self.reset_parameters()
         else:
@@ -50,6 +50,7 @@ class LookupEmbedding(Module):
             ), "_weight MUST be of shape (num_embeddings, *embedding_dim)"
             self.weight = geoopt.ManifoldParameter(_weight, manifold=self.manifold)
 
+    @torch.no_grad()
     def reset_parameters(self):
         # TODO: allow some sort of InitPolicy
         #       as LookupEmbedding's parameter
@@ -57,8 +58,11 @@ class LookupEmbedding(Module):
         #       at the moment, you're supposed
         #       to do actual init on your own
         #       in the client code.
-        with torch.no_grad():
-            self.weight.fill_(0)
+        self.weight.set_(
+            geoopt.manifolds.poincare.math.expmap0(
+                self.point.uniform_(-1, 1) / self.ball.c ** 0.5, c=self.ball.c
+            )
+        )
 
     def forward(self, input):
         shape = list(input.shape) + list(self.weight.shape[1:])

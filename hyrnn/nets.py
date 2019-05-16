@@ -10,19 +10,11 @@ def mobius_linear(
     input,
     weight,
     bias=None,
-    hyperbolic_input=True,
-    hyperbolic_bias=True,
     nonlin=None,
     c=1.0,
 ):
-    if hyperbolic_input:
-        output = pmath.mobius_matvec(weight, input, c=c)
-    else:
-        output = torch.nn.functional.linear(input, weight)
-        output = pmath.expmap0(output, c=c)
+    output = pmath.mobius_matvec(weight, input, c=c)
     if bias is not None:
-        if not hyperbolic_bias:
-            bias = pmath.expmap0(bias, c=c)
         output = pmath.mobius_add(output, bias, c=c)
     if nonlin is not None:
         output = pmath.mobius_fn_apply(nonlin, output, c=c)
@@ -71,16 +63,9 @@ def mobius_gru_loop(
     bias: torch.Tensor,
     c: torch.Tensor,
     batch_sizes=None,
-    hyperbolic_input: bool = False,
-    hyperbolic_hidden_state0: bool = False,
     nonlin=None,
 ):
-    if not hyperbolic_hidden_state0:
-        hx = pmath.expmap0(h0, c=c)
-    else:
-        hx = h0
-    if not hyperbolic_input:
-        input = pmath.expmap0(input, c=c)
+    hx = h0
     outs = []
     if batch_sizes is None:
         input_unbinded = input.unbind(0)
@@ -127,74 +112,74 @@ class MobiusLinear(torch.nn.Linear):
     def __init__(
         self,
         *args,
-        hyperbolic_input=True,
-        hyperbolic_bias=True,
         nonlin=None,
         c=1.0,
-        order=1,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
         if self.bias is not None:
-            if hyperbolic_bias:
-                self.ball = manifold = geoopt.PoincareBall(c=c).set_default_order(order)
-                self.bias = geoopt.ManifoldParameter(self.bias, manifold=manifold)
-                with torch.no_grad():
-                    self.bias.set_(pmath.expmap0(self.bias.normal_() / 4, c=c))
-        with torch.no_grad():
-            self.weight.normal_(std=1e-2)
-        self.hyperbolic_bias = hyperbolic_bias
-        self.hyperbolic_input = hyperbolic_input
+            self.ball = manifold = geoopt.PoincareBall(c=c)
+            self.bias = geoopt.ManifoldParameter(self.bias, manifold=manifold)
         self.nonlin = nonlin
+        self.reset_parameters()
 
     def forward(self, input):
         return mobius_linear(
             input,
             weight=self.weight,
             bias=self.bias,
-            hyperbolic_input=self.hyperbolic_input,
             nonlin=self.nonlin,
-            hyperbolic_bias=self.hyperbolic_bias,
             c=self.ball.c,
         )
 
-    def extra_repr(self):
-        info = super().extra_repr()
-        info += "c={}, hyperbolic_input={}".format(self.ball.c, self.hyperbolic_input)
+    @torch.no_grad()
+    def reset_parameters(self):
+        self.weight.normal_(std=1e-2)
         if self.bias is not None:
-            info = ", hyperbolic_bias={}".format(self.hyperbolic_bias)
-            if self.hyperbolic_bias:
-                info += ", order={}".format(self.ball.default_order)
-        return info
+            self.bias.set_(pmath.expmap0(self.bias.normal_() / 4, c=self.c))
 
 
 class MobiusDist2Hyperplane(torch.nn.Module):
-    def __init__(self, in_features, out_features, c=1.0, order=1):
+    def __init__(self, in_features, out_features, c=1.0, use_tangent=True, scale=True):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.ball = ball = geoopt.PoincareBall(c=c).set_default_order(order)
-        self.sphere = sphere = geoopt.manifolds.Sphere().set_default_order(order)
-        self.scale = torch.nn.Parameter(torch.zeros(out_features))
-        point = torch.randn(out_features, in_features) / 4
-        point = pmath.expmap0(point, c=c)
-        tangent = torch.randn(out_features, in_features)
+        self.ball = ball = geoopt.PoincareBall(c=c)
+        if scale:
+            self.scale = geoopt.ManifoldParameter(torch.ones(out_features))
+        else:
+            self.register_parameter("scale", None)
+        point = torch.empty(out_features, in_features)
         self.point = geoopt.ManifoldParameter(point, manifold=ball)
-        self.tangent = geoopt.ManifoldParameter(tangent, manifold=sphere).proj_()
+        self.use_tangent = use_tangent
+        if use_tangent:
+            tangent = torch.empty_like(point)
+            self.sphere = sphere = geoopt.manifolds.Sphere()
+            self.tangent = geoopt.ManifoldParameter(tangent, manifold=sphere)
+        else:
+            self.register_parameter("tangent", None)
+        self.reset_parameters()
 
     def forward(self, input):
         input = input.unsqueeze(-2)
-        distance = pmath.dist2plane(
-            x=input, p=self.point, a=self.tangent, c=self.ball.c, signed=True
+        if self.tangent is not None:
+            tangent = self.tangent
+        else:
+            tangent = self.point
+        distance = geoopt.manifolds.poincare.math.dist2plane(
+            x=input, p=self.point, a=tangent, c=self.ball.c, signed=True
         )
-        return distance * self.scale.exp()
+        if self.scale is not None:
+            return (distance * torch.nn.functional.softplus(self.scale)).clamp(
+                -1e15, 1e15
+            )
+        else:
+            return distance.clamp(-1e15, 1e15)
 
     def extra_repr(self):
         return (
-            "in_features={in_features}, out_features={out_features}, "
-            "c={ball.c}, order={ball.default_order}".format(
-                **self.__dict__, ball=self.ball
-            )
+            "in_features={in_features}, out_features={out_features}, tangent={use_tangent}"
+            .format(**self.__dict__)
         )
 
 
@@ -209,10 +194,9 @@ class MobiusGRU(torch.nn.Module):
         hyperbolic_input=True,
         hyperbolic_hidden_state0=True,
         c=1.0,
-        order=1,
     ):
         super().__init__()
-        self.ball = geoopt.PoincareBall(c=c).set_default_order(order)
+        self.ball = geoopt.PoincareBall(c=c)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -220,23 +204,23 @@ class MobiusGRU(torch.nn.Module):
         self.weight_ih = torch.nn.ParameterList(
             [
                 torch.nn.Parameter(
-                    torch.Tensor(3 * hidden_size, input_size if i == 0 else hidden_size)
+                    torch.empty(3 * hidden_size, input_size if i == 0 else hidden_size)
                 )
                 for i in range(num_layers)
             ]
         )
         self.weight_hh = torch.nn.ParameterList(
             [
-                torch.nn.Parameter(torch.Tensor(3 * hidden_size, hidden_size))
+                torch.nn.Parameter(torch.empty(3 * hidden_size, hidden_size))
                 for _ in range(num_layers)
             ]
         )
         if bias:
             biases = []
             for i in range(num_layers):
-                bias = torch.randn(3, hidden_size) * 1e-5
+                bias = torch.empty(3, hidden_size)
                 bias = geoopt.ManifoldParameter(
-                    pmath.expmap0(bias, c=self.ball.c), manifold=self.ball
+                    bias, manifold=self.ball
                 )
                 biases.append(bias)
             self.bias = torch.nn.ParameterList(biases)
@@ -247,10 +231,13 @@ class MobiusGRU(torch.nn.Module):
         self.hyperbolic_hidden_state0 = hyperbolic_hidden_state0
         self.reset_parameters()
 
+    @torch.no_grad()
     def reset_parameters(self):
         stdv = 1.0 / math.sqrt(self.hidden_size)
         for weight in itertools.chain.from_iterable([self.weight_ih, self.weight_hh]):
             torch.nn.init.uniform_(weight, -stdv, stdv)
+        for bias in self.bias:
+            bias.set_(pmath.expmap0(bias.normal_() / 4, c=self.ball.c))
 
     def forward(self, input: torch.Tensor, h0=None):
         # input shape: seq_len, batch, input_size
@@ -282,8 +269,6 @@ class MobiusGRU(torch.nn.Module):
                 weight_hh=self.weight_hh[i],
                 bias=biases[i],
                 c=self.ball.c,
-                hyperbolic_hidden_state0=self.hyperbolic_hidden_state0 or i > 0,
-                hyperbolic_input=self.hyperbolic_input or i > 0,
                 nonlin=self.nonlin,
                 batch_sizes=batch_sizes,
             )
