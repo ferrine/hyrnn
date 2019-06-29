@@ -38,7 +38,6 @@ parser.add_argument("--lr", type=float, default=3e-4)
 parser.add_argument("--sgd", action='store_true')
 parser.add_argument("--adam_betas", type=str, default="0.9,0.999")
 parser.add_argument("--wd", type=float, default=0.)
-parser.add_argument("--order", type=int, default=1)
 parser.add_argument("--c", type=float, default=1.)
 parser.add_argument("--j", type=int, default=1)
 
@@ -82,7 +81,6 @@ model = model.RNNBase(
     num_layers=args.num_layers,
     use_distance_as_feature=args.use_distance_as_feature,
     num_classes=2,
-    order=args.order,
     c=args.c
 ).double()
 

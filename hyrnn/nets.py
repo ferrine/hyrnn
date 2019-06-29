@@ -131,13 +131,12 @@ class MobiusLinear(torch.nn.Linear):
         hyperbolic_bias=True,
         nonlin=None,
         c=1.0,
-        order=1,
         **kwargs
     ):
         super().__init__(*args, **kwargs)
         if self.bias is not None:
             if hyperbolic_bias:
-                self.ball = manifold = geoopt.PoincareBall(c=c).set_default_order(order)
+                self.ball = manifold = geoopt.PoincareBall(c=c)
                 self.bias = geoopt.ManifoldParameter(self.bias, manifold=manifold)
                 with torch.no_grad():
                     self.bias.set_(pmath.expmap0(self.bias.normal_() / 4, c=c))
@@ -163,18 +162,16 @@ class MobiusLinear(torch.nn.Linear):
         info += "c={}, hyperbolic_input={}".format(self.ball.c, self.hyperbolic_input)
         if self.bias is not None:
             info = ", hyperbolic_bias={}".format(self.hyperbolic_bias)
-            if self.hyperbolic_bias:
-                info += ", order={}".format(self.ball.default_order)
         return info
 
 
 class MobiusDist2Hyperplane(torch.nn.Module):
-    def __init__(self, in_features, out_features, c=1.0, order=1):
+    def __init__(self, in_features, out_features, c=1.0):
         super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.ball = ball = geoopt.PoincareBall(c=c).set_default_order(order)
-        self.sphere = sphere = geoopt.manifolds.Sphere().set_default_order(order)
+        self.ball = ball = geoopt.PoincareBall(c=c)
+        self.sphere = sphere = geoopt.manifolds.Sphere()
         self.scale = torch.nn.Parameter(torch.zeros(out_features))
         point = torch.randn(out_features, in_features) / 4
         point = pmath.expmap0(point, c=c)
@@ -192,8 +189,8 @@ class MobiusDist2Hyperplane(torch.nn.Module):
     def extra_repr(self):
         return (
             "in_features={in_features}, out_features={out_features}, "
-            "c={ball.c}, order={ball.default_order}".format(
-                **self.__dict__, ball=self.ball
+            "c={ball.c}".format(
+                **self.__dict__
             )
         )
 
@@ -209,10 +206,9 @@ class MobiusGRU(torch.nn.Module):
         hyperbolic_input=True,
         hyperbolic_hidden_state0=True,
         c=1.0,
-        order=1,
     ):
         super().__init__()
-        self.ball = geoopt.PoincareBall(c=c).set_default_order(order)
+        self.ball = geoopt.PoincareBall(c=c)
         self.input_size = input_size
         self.hidden_size = hidden_size
         self.num_layers = num_layers
@@ -257,7 +253,7 @@ class MobiusGRU(torch.nn.Module):
         # hx shape: batch, hidden_size
         is_packed = isinstance(input, torch.nn.utils.rnn.PackedSequence)
         if is_packed:
-            input, batch_sizes = input
+            input, batch_sizes = input[:2]
             max_batch_size = int(batch_sizes[0])
         else:
             batch_sizes = None

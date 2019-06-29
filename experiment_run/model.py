@@ -21,7 +21,6 @@ class RNNBase(nn.Module):
         num_layers=1,
         num_classes=1,
         c=1.0,
-        order=1,
     ):
         super(RNNBase, self).__init__()
         (cell_type, embedding_type, decision_type) = map(
@@ -37,7 +36,7 @@ class RNNBase(nn.Module):
             self.embedding = hyrnn.LookupEmbedding(
                 vocab_size,
                 embedding_dim,
-                manifold=geoopt.PoincareBall(c=c).set_default_order(order),
+                manifold=geoopt.PoincareBall(c=c),
             )
             with torch.no_grad():
                 self.embedding.weight.set_(
@@ -53,17 +52,17 @@ class RNNBase(nn.Module):
             self.logits = nn.Linear(project_dim, num_classes)
         elif decision_type == "hyp":
             self.projector_source = hyrnn.MobiusLinear(
-                hidden_dim, project_dim, c=c, order=order
+                hidden_dim, project_dim, c=c
             )
             self.projector_target = hyrnn.MobiusLinear(
-                hidden_dim, project_dim, c=c, order=order
+                hidden_dim, project_dim, c=c
             )
             self.logits = hyrnn.MobiusDist2Hyperplane(project_dim, num_classes)
         else:
             raise NotImplementedError(
                 "Unsuported decision type: {0}".format(decision_type)
             )
-        self.ball = geoopt.PoincareBall(c).set_default_order(order)
+        self.ball = geoopt.PoincareBall(c)
         if use_distance_as_feature:
             if decision_type == "eucl":
                 self.dist_bias = nn.Parameter(torch.zeros(project_dim))
@@ -85,7 +84,7 @@ class RNNBase(nn.Module):
         elif cell_type == "eucl_gru":
             self.cell = nn.GRU
         elif cell_type == "hyp_gru":
-            self.cell = functools.partial(hyrnn.MobiusGRU, c=c, order=order)
+            self.cell = functools.partial(hyrnn.MobiusGRU, c=c)
         else:
             raise NotImplementedError("Unsuported cell type: {0}".format(cell_type))
         self.cell_type = cell_type
