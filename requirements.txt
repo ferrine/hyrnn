@@ -10,5 +10,5 @@ absl-py>=0.4
 grpcio>=1.6.3
 tensorboardX
 torchnet
-catalyst
+catalyst==19.3
 git+https://github.com/geoopt/geoopt.git@poincare
