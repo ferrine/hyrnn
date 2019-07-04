@@ -3,7 +3,7 @@ import sys
 sys.path.append("..")
 
 import argparse
-
+import os
 import torch.utils.data
 import torch.nn as nn
 import geoopt
@@ -18,7 +18,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument("--data_dir", type=str, help="", default="./data")
 parser.add_argument("--data_class", type=int, help="", default=10)
 parser.add_argument("--num_epochs", type=int, help="", default=100)
-parser.add_argument("--log_dir", type=str, help="", default="./logdir")
+parser.add_argument("--log_dir", type=str, help="", default="logdir")
 parser.add_argument("--batch_size", type=int, help="", default=64)
 
 parser.add_argument("--embedding_dim", type=int, help="", default=5)
@@ -43,10 +43,10 @@ parser.add_argument("--j", type=int, default=1)
 
 
 args = parser.parse_args()
-
+os.mkdir("./logs")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 data_dir = args.data_dir
-logdir = args.log_dir
+logdir = os.path.join("./logs", args.log_dir)
 
 n_epochs = args.num_epochs
 num = args.data_class
