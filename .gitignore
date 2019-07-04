@@ -112,4 +112,4 @@ cfg/
 data/
 notebooks/
 
-experiment_run/logdir/
+experiment_run/logs/
