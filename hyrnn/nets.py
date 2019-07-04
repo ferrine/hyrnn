@@ -177,7 +177,8 @@ class MobiusDist2Hyperplane(torch.nn.Module):
         point = pmath.expmap0(point, c=c)
         tangent = torch.randn(out_features, in_features)
         self.point = geoopt.ManifoldParameter(point, manifold=ball)
-        self.tangent = geoopt.ManifoldParameter(tangent, manifold=sphere).proj_()
+        with torch.no_grad():
+            self.tangent = geoopt.ManifoldParameter(tangent, manifold=sphere).proj_()
 
     def forward(self, input):
         input = input.unsqueeze(-2)
